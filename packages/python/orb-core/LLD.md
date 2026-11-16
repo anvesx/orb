@@ -14,6 +14,7 @@ reader, a streaming Ollama client, the agent interface with its session store, a
 | `web.py` | the readable text of a web page, with a guard against private addresses |
 | `rooms.py` | the room-to-session rule that the agent service and the voice worker share (`orb-<session id>`) |
 | `gemini.py` | the Gemini Live models, voices and spoken-turn rules that both apps share |
+| `telemetry.py` | OpenTelemetry to New Relic when `NEW_RELIC_LICENSE_KEY` is set; the `orb.turn` span of a turn |
 
 ## 1. Input
 | Input | Limits | Trust |
@@ -58,6 +59,7 @@ reader, a streaming Ollama client, the agent interface with its session store, a
 | Repo root | the nearest folder with `packages/python/orb-core` | `test_repo_root_finds_the_orb_core_folder` |
 | Room names | `orb-<id>` maps to `<id>`; others to a stable `room-` hash; `room_for` maps back | `test_rooms.py` |
 | Protocols | test doubles satisfy `Agent` and `Session` | `test_agent.py::test_fakes_satisfy_the_protocols` |
+| Telemetry | off without a key; a turn is one span with `jev.read`, `llm` and `jev.read_ai` inside; no words unless `ORB_LOG_TEXT=1` | `test_telemetry.py` |
 | Events | an unknown type is refused; JSON is stable | `test_event_rejects_unknown_types_and_serializes` |
 | Session IDs | `..`, spaces, capitals and long IDs are refused | `test_session_ids` |
 | Store | create, get, turn, save (no `.tmp` left) | `test_store_create_get_save` |
@@ -76,6 +78,8 @@ reader, a streaming Ollama client, the agent interface with its session store, a
   check and to a private one at the connection) is not blocked. Close it before the server is reachable from a
   network: connect to the checked address, not the name.
 - **Path safety:** session IDs cannot contain `/` or `.`, so a snapshot path cannot leave `data/sessions/`.
+- **Telemetry** sends nothing without `NEW_RELIC_LICENSE_KEY`. With it, the person's text, the reply and the persona
+  note leave the computer only with `ORB_LOG_TEXT=1`; otherwise only timings, personas and errors do.
 
 ## 6. Performance
 Every function here is far below 1 ms, except the network calls: an Ollama stream (see orb-discussion) and a

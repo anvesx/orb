@@ -21,11 +21,12 @@ from pathlib import Path
 import httpx
 from livekit import agents, rtc
 from livekit.agents import Agent, AgentServer, AgentSession, APIConnectOptions, JobContext, JobProcess, inference
+from livekit.agents import telemetry as lk_telemetry
 from livekit.agents import tts as lk_tts
 from livekit.agents.voice.agent_session import SessionConnectOptions
 from livekit.plugins import silero
 
-from orb_core import gemini
+from orb_core import gemini, telemetry
 from orb_core.rooms import session_for
 from orb_voice import gemini_live
 from orb_voice.config import Settings, check_livekit, load_repo_env
@@ -40,6 +41,9 @@ def setup(proc: JobProcess) -> None:
     """Once per worker process: the settings and the Silero model."""
     load_repo_env()
     s = Settings.from_env()
+    provider = telemetry.start("orb-voice")
+    if provider:
+        lk_telemetry.set_tracer_provider(provider, allow_pii=telemetry.text_allowed())
     proc.userdata["settings"] = s
     proc.userdata["vad"] = silero.VAD.load(min_speech_duration=s.vad_min_speech, min_silence_duration=s.vad_min_silence,
                                            prefix_padding_duration=s.vad_prefix, activation_threshold=s.vad_threshold)
@@ -132,6 +136,7 @@ async def entry(ctx: JobContext) -> None:
     t0 = time.perf_counter()
     http = httpx.AsyncClient(limits=httpx.Limits(max_keepalive_connections=8))
     ctx.add_shutdown_callback(http.aclose)
+    ctx.add_shutdown_callback(lambda: asyncio.to_thread(telemetry.flush))
     cfg = await ensure_session(http, s.agent_url, sid)
     bench = Bench(ctx.room)
     if cfg.get("voice_mode") == "gemini-live":

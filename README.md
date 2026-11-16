@@ -59,6 +59,12 @@ device unless the request has `ORB_SHARE_KEY` (open `https://<host>/?key=<the ke
 `make dev` runs ngrok for that address. The page and the voice signal use that one address; the audio goes straight to
 this computer, so a device needs a network path to it. See [decision 0009](docs/decisions/0009-sharing.md).
 
+**A dashboard of calls and turns:** set `NEW_RELIC_LICENSE_KEY` in `.env` (a free New Relic account). The agent
+service and the voice worker then send traces, metrics and logs over OpenTelemetry: each call's steps and timings,
+each turn's persona, and the words only with `ORB_LOG_TEXT=1`. Without the key nothing is sent.
+`scripts/newrelic_dashboard.py` makes the orb dashboard from `docs/observability/orb-dashboard.json`. See
+[decision 0017](docs/decisions/0017-observability-otel-new-relic.md).
+
 ## Layout
 | Path | What it is | Design |
 |---|---|---|
@@ -79,7 +85,7 @@ this computer, so a device needs a network path to it. See [decision 0009](docs/
   performance, edge cases, expected results ([template](docs/lld-template.md)).
 - **Numbers are measured** and dated, or their source is named.
 - **Local by default.** Every service binds 127.0.0.1, and a request from a tunnel needs a key; the only external call
-  in a turn is the Jev reader.
+  in a turn is the Jev reader (and New Relic, only when its key is set).
 
 ## Measured (Apple M5, 16 GB)
 | | |

@@ -167,6 +167,8 @@ link on plain http, on a secure origin and at phone width, the worker off, and t
   it is accepted only for a loopback LiveKit URL.
 - **XSS:** the page escapes every text from a person, the LLM or Jev before it renders it (`esc`).
 - **The fonts** come from Google Fonts. Offline, the page uses system fonts.
+- **Telemetry:** with `NEW_RELIC_LICENSE_KEY`, each turn is an `orb.turn` trace in New Relic (persona, timings,
+  errors), with words only when `ORB_LOG_TEXT=1` (orb-core LLD, `telemetry.py`). Without the key nothing is sent.
 - **The bench API** reads only files inside the bench's folders (`inside()` resolves the path first) and only from
   fixed lists of groups and suites. It starts one suite at a time: a suite uses the same models as a live call, and
   the llm and turn suites spend Jev reads.
