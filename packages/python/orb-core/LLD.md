@@ -12,6 +12,8 @@ reader, a streaming Ollama client, the agent interface with its session store, a
 | `ollama.py` | streaming chat with a local LLM |
 | `agent.py` | `Agent`, `Session`, `Event`, input checks, `SessionStore` |
 | `web.py` | the readable text of a web page, with a guard against private addresses |
+| `rooms.py` | the room-to-session rule that the agent service and the voice worker share (`orb-<session id>`) |
+| `gemini.py` | the Gemini Live models, voices and spoken-turn rules that both apps share |
 
 ## 1. Input
 | Input | Limits | Trust |
@@ -54,6 +56,7 @@ reader, a streaming Ollama client, the agent interface with its session store, a
 | A missing required variable | the error names the variable | `test_env_required_names_the_variable_but_not_a_value` |
 | Secret names | KEY, TOKEN, SECRET, PASSWORD are secret | `test_is_secret` |
 | Repo root | the nearest folder with `packages/python/orb-core` | `test_repo_root_finds_the_orb_core_folder` |
+| Room names | `orb-<id>` maps to `<id>`; others to a stable `room-` hash; `room_for` maps back | `test_rooms.py` |
 | Protocols | test doubles satisfy `Agent` and `Session` | `test_agent.py::test_fakes_satisfy_the_protocols` |
 | Events | an unknown type is refused; JSON is stable | `test_event_rejects_unknown_types_and_serializes` |
 | Session IDs | `..`, spaces, capitals and long IDs are refused | `test_session_ids` |

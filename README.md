@@ -7,11 +7,40 @@ company's own documents; the [roadmap](docs/roadmap.md) builds it one feature pe
 **Iteration 0 (2026-10-21)** ships the foundation: the discussion agent, which does not just agree, in text and
 in local voice. **On 2026-10-22** the voice worker moved to LiveKit Agents, and a bench now measures every model.
 
+## How it fits together
 ```
-browser ─ text ─▶ agent service ─▶ Jev reads · debt rules choose a persona · Gemma speaks
-browser ─ voice ─▶ LiveKit ─▶ voice worker (LiveKit Agents): Silero · Whistle · LiveKit turn detector
-                              ─▶ agent service ─▶ Kokoro ─▶ room
+ CHANNELS        web chat (browser)              voice call (browser ─▶ LiveKit ─▶ voice worker)
+                       │                                   │
+                       │                    orb pipeline:  │  speech service (:8200)
+                       │                    hear ─ STT ────┼─▶ Whistle · Parakeet · Qwen3-ASR · Cartesia (cloud)
+                       │                    speak ◀─ TTS ──┼── Kokoro · maya1 · indic-speak
+                       │                                   │
+                       │                    Gemini Live:   │  one Google model hears, thinks and speaks;
+                       │                                   │  orb gives it only the system prompt
+                       ▼                                   ▼
+ AGENT SERVICE   apps/agent (:8100) · one HTTP API: sessions · turns ─▶ NDJSON events
+                 server.py: brain routes          voice.py: LiveKit tokens · Gemini Live settings
+                       │
+                       ▼
+ BRAIN           the discussion agent (orb-discussion), behind the agent interface (orb_core.agent)
+                 one turn:  Jev reads the message ─▶ debt rules ─▶ one of six personas ─▶ Gemma writes ─▶ check
 ```
+**The brain packages (orb-discussion and the agent interface) import no voice code**, and `server.py` keeps the voice
+routes in `voice.py`; a test checks both. Another channel or another voice stack uses the same brain through the same
+HTTP API.
+
+**The discussion agent does not just agree.** Jev reads each message with yes/no questions (a claim with no reason?
+a new option? a disagreement?). Fixed rules turn the answers into debts, and the most urgent debt picks the persona
+that writes the reply:
+
+| Persona | Pays the debt by |
+|---|---|
+| Teacher | explaining clearly, from the shared source when there is one |
+| Examiner | asking for the reason behind a claim before accepting it |
+| Rival | arguing for the strongest other option, fairly |
+| Judge | weighing a reason on its merits, not to be polite |
+| Navigator | moving the discussion on, without repeating points |
+| Chair | closing the discussion short and exact |
 
 ## Quick start (macOS, Apple Silicon)
 ```sh

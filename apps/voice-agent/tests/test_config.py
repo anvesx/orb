@@ -1,14 +1,7 @@
-"""The room-to-session rule, the .env filter, the LiveKit credentials rule and the settings."""
+"""The .env filter, the LiveKit credentials rule and the settings."""
 import pytest
 
-from orb_voice.config import SESSION_ID, Settings, load_repo_env, session_for
-
-
-def test_session_for_rooms_of_the_web_page_and_others():
-    assert session_for("orb-20261021-191500-a1b2c3") == "20261021-191500-a1b2c3"
-    a, b = session_for("Some Room!"), session_for("Some Room!")
-    assert a == b and SESSION_ID.match(a) and a.startswith("room-")  # stable and valid
-    assert session_for("orb-BAD ID") != "BAD ID"  # an invalid ID after the prefix does not pass
+from orb_voice.config import Settings, load_repo_env
 
 
 def test_repo_env_copies_only_orb_and_livekit_keys_and_the_gemini_key(tmp_path, monkeypatch):
