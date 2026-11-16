@@ -20,8 +20,11 @@ SPEC = repo_root() / "docs" / "observability" / "orb-dashboard.json"
 
 
 def graphql(key: str, query: str, variables: dict) -> dict:
-    r = httpx.post(API, headers={"API-Key": key}, json={"query": query, "variables": variables}, timeout=60)
-    r.raise_for_status()
+    try:
+        r = httpx.post(API, headers={"API-Key": key}, json={"query": query, "variables": variables}, timeout=60)
+        r.raise_for_status()
+    except httpx.HTTPError as e:
+        sys.exit(f"New Relic could not be reached or refused the key: {e}")
     body = r.json()
     if body.get("errors"):
         sys.exit(f"New Relic refused the request: {[e.get('message') for e in body['errors']]}")

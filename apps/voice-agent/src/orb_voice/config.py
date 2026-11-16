@@ -31,8 +31,8 @@ def check_livekit(env=os.environ) -> None:
 
 
 def load_repo_env(root: Path | None = None) -> list[str]:
-    """Copy ORB_* and LIVEKIT_* keys and GOOGLE_API_KEY from the repo .env into os.environ when they are not set.
-    Returns the names."""
+    """Copy ORB_* and LIVEKIT_* keys and the names in ENV_NAMES from the repo .env into os.environ when they are not
+    set. Returns the names."""
     return load_env_prefixes(ENV_PREFIXES, root, exact=ENV_NAMES)
 
 

@@ -62,7 +62,7 @@ def start(service: str):
 
 def flush() -> None:
     for p in _providers:
-        p.force_flush()
+        p.force_flush(timeout_millis=5000)
 
 
 async def traced(events: AsyncIterator[Event], sid: str, channel: str, text: str,

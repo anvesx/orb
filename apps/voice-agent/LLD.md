@@ -72,7 +72,8 @@ The room name gives the session (`orb_core.rooms`, shared with the agent service
    has sizes and timings, and words only with `ORB_LOG_TEXT=1`.
 9. **Telemetry:** with `NEW_RELIC_LICENSE_KEY`, each worker process hands an OpenTelemetry tracer to LiveKit Agents,
    which traces the call (VAD, STT, LLM, TTS, Gemini realtime, tokens); the orb log lines go too. A call's spans are
-   flushed when it ends (docs/design/observability.md).
+   flushed when it ends (5 s at most for each provider); spans that end later go on the next batch or when the
+   process exits (docs/design/observability.md).
 
 ## 3. Maths
 | Setting | Value | Env | Source |

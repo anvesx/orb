@@ -21,9 +21,9 @@ Another OTel backend needs only another endpoint and key, not code.
 ## 3. Design
 | Part | Change |
 |---|---|
-| `orb_core/telemetry.py` (new) | `start(service)`: tracer, meter and logger providers with OTLP/HTTP exporters to `https://otlp.nr-data.net` (`OTEL_EXPORTER_OTLP_ENDPOINT` overrides), header `api-key`; the `orb` logger's lines go too. `text_allowed()`. `traced(events, sid, channel)`: passes each event on unchanged and records an `orb.turn` span with `jev.read`, `llm` and `jev.read_ai` child spans placed by the turn's timing. |
+| `orb_core/telemetry.py` (new) | `start(service)`: tracer, meter and logger providers with OTLP/HTTP exporters to `https://otlp.nr-data.net` (`OTEL_EXPORTER_OTLP_ENDPOINT` overrides), header `api-key`; the `orb` logger's lines go too. `text_allowed()`. `traced(events, sid, channel, text)`: passes each event on unchanged and records an `orb.turn` span with `jev.read`, `llm` and `jev.read_ai` child spans placed by the turn's timing. |
 | agent service | `main()` calls `start("orb-agent")`; `turn()` streams `traced(...)`. |
-| voice worker | `NEW_RELIC_LICENSE_KEY` and `OTEL_EXPORTER_OTLP_ENDPOINT` load from `.env`; each worker process calls `start("orb-voice")` and hands the tracer to LiveKit Agents (`set_tracer_provider`), which traces every call: VAD, STT, LLM, TTS, Gemini realtime, tokens. A call's spans are flushed when it ends. |
+| voice worker | `NEW_RELIC_LICENSE_KEY` and `OTEL_EXPORTER_OTLP_ENDPOINT` load from `.env`; each worker process calls `start("orb-voice")` and hands the tracer to LiveKit Agents (`set_tracer_provider`), which traces every call: VAD, STT, LLM, TTS, Gemini realtime, tokens. When a call ends, its spans are flushed (5 s at most for each provider); spans that end later go on the next batch or when the process exits. |
 
 ## 4. Tickets
 | # | Ticket |
