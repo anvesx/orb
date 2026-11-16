@@ -14,7 +14,8 @@ from orb_core.config import load_env_prefixes
 
 DEV_KEY, DEV_SECRET = "devkey", "secret"  # the public credentials of `livekit-server --dev`
 ENV_PREFIXES = ("ORB_", "LIVEKIT_")
-ENV_NAMES = ("GOOGLE_API_KEY",)  # by its exact name: the Gemini key (Gemini Live, docs/design/gemini-live.md)
+ENV_NAMES = ("GOOGLE_API_KEY",  # by its exact name: the Gemini key (Gemini Live, docs/design/gemini-live.md)
+             "NEW_RELIC_LICENSE_KEY", "OTEL_EXPORTER_OTLP_ENDPOINT")
 
 
 def check_livekit(env=os.environ) -> None:
