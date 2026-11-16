@@ -139,7 +139,7 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
         return FileResponse(STATIC / "index.html")
 
     @app.get("/bench")
-    async def bench_page():  # the bench tools are tabs of the chat page now
+    async def bench_page():  # the bench tools are tabs of the chat page
         return RedirectResponse("/", status_code=307)
 
     @app.get("/health")
