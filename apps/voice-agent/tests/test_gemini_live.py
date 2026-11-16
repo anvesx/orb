@@ -27,7 +27,7 @@ def test_options_carry_the_session_choice_transcripts_and_long_call_settings():
     assert o["context_window_compression"].sliding_window is not None and o["session_resumption"] is not None
     assert gemini_live.options({"gemini_model": "gpt-9", "gemini_voice": "Siri"})["model"] == gemini.DEFAULT_MODEL
     assert gemini_live.options({})["voice"] == gemini.DEFAULT_VOICE
-    # extended thinking needs a level (the first shared test: 1007 "Thinking level must be specified"); 3.8 Live refuses one
+    # extended thinking refuses a session without a level (1007 "Thinking level must be specified"); 3.8 Live refuses one
     assert o["thinking_config"].thinking_level.name == "LOW"
     assert "thinking_config" not in gemini_live.options({"gemini_model": "gemini-3.8-live"})
 
