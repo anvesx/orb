@@ -1,6 +1,6 @@
 # orb architecture
 
-Last update: 2026-11-16 (the brain imports no voice code, decision 0016)
+Last update: 2026-11-16 (the brain packages import no voice code, decision 0016)
 
 ## The idea in one sentence
 **orb is a platform for company agents: each agent is a brain behind one interface, and channels (web, voice,
@@ -24,7 +24,7 @@ later Slack) carry turns to it.**
  CHANNELS            web chat (browser)        voice (browser → LiveKit → voice worker)     Slack (later)
                             │                              │
                             ▼                              ▼
- AGENT SERVICE      apps/agent · one HTTP API · sessions · NDJSON events (server.py, no voice import)
+ AGENT SERVICE      apps/agent · one HTTP API · sessions · NDJSON events (server.py, no voice code)
                     voice channel: LiveKit tokens · Gemini Live settings and prompt (voice.py)
                             │
                             ▼

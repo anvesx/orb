@@ -28,8 +28,8 @@ Errors reach the page once, in words (`gemini_live.explain`): key refused, quota
 | The session config `{stt_engine, llm_model, tts_engine, tts_voice, tts_style, tts_lang, voice_mode, gemini_model, gemini_voice}` | `PUT /v1/sessions/{id}` of the agent service, at join | checked by the agent service |
 | Settings (table in section 3) | the environment; the repo `.env` fills in only unset `ORB_*` and `LIVEKIT_*` keys and `GOOGLE_API_KEY` | the operator |
 
-The room name gives the session (`orb_core.rooms`, shared with the agent service): `orb-<id>` is the session `<id>` (3 to 48 of `a-z 0-9 -`); any other room gets
-`room-` + the first 12 hex digits of its SHA-256.
+The room name gives the session (`orb_core.rooms`, shared with the agent service): `orb-<id>` is the session `<id>`
+(3 to 48 of `a-z 0-9 -`); any other room gets `room-` + the first 12 hex digits of its SHA-256.
 
 ## 2. Algorithm
 1. **Start** (`setup`, once per process): read the settings and load Silero. The health server binds 127.0.0.1:8081.

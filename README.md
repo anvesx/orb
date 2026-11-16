@@ -25,8 +25,9 @@ in local voice. **On 2026-10-22** the voice worker moved to LiveKit Agents, and 
  BRAIN           the discussion agent (orb-discussion), behind the agent interface (orb_core.agent)
                  one turn:  Jev reads the message ─▶ debt rules ─▶ one of six personas ─▶ Gemma writes ─▶ check
 ```
-**The brain never imports voice code** (a test checks it). So the agent service runs as a text-only brain, and
-another channel or another voice stack can use it through the same HTTP API.
+**The brain packages (orb-discussion and the agent interface) import no voice code**, and `server.py` keeps the voice
+routes in `voice.py`; a test checks both. Another channel or another voice stack uses the same brain through the same
+HTTP API.
 
 **The discussion agent does not just agree.** Jev reads each message with yes/no questions (a claim with no reason?
 a new option? a disagreement?). Fixed rules turn the answers into debts, and the most urgent debt picks the persona

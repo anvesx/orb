@@ -9,14 +9,22 @@ AGENT = ROOT / "apps/agent/src/orb_agent"
 VOICE = ("livekit", "google", "orb_core.gemini", "orb_speech", "orb_voice", "orb_agent")
 
 
+def package(path: Path) -> list[str]:
+    """The dotted package of a source file: the folders below `src/`."""
+    parts = path.parent.parts
+    return list(parts[parts.index("src") + 1:])
+
+
 def imports(path: Path) -> set[str]:
     names = set()
     for node in ast.walk(ast.parse(path.read_text())):
         if isinstance(node, ast.Import):
             names |= {a.name for a in node.names}
-        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            names.add(node.module)
-            names |= {f"{node.module}.{a.name}" for a in node.names}
+        elif isinstance(node, ast.ImportFrom):
+            base = package(path)[:len(package(path)) - node.level + 1] if node.level else []
+            module = ".".join(base + ([node.module] if node.module else []))
+            names.add(module)
+            names |= {f"{module}.{a.name}" for a in node.names}
     return names
 
 
@@ -30,7 +38,7 @@ def offenders(paths, banned) -> list[str]:
 
 
 def test_the_brain_imports_no_voice():
-    brain = [CORE / f for f in ("agent.py", "config.py", "jev.py", "ollama.py", "rooms.py", "web.py")]
+    brain = [p for p in files(CORE) if p.name != "gemini.py"]  # gemini.py: the voice facts both apps share
     assert offenders(brain + files(ROOT / "packages/python/orb-discussion/src"), VOICE) == []
 
 

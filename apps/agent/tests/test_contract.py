@@ -1,5 +1,5 @@
-"""The agent service's public surface, recorded on main before the layer separation (docs/design/layer-separation.md):
-the routes of every setup and the fields of each answer. A refactor must leave this file unchanged."""
+"""The agent service's public surface: the routes of every setup and the fields of each answer. A refactor must leave
+this file unchanged."""
 import tempfile
 
 from fastapi.testclient import TestClient

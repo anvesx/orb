@@ -1,11 +1,12 @@
-# 0016 · The brain imports no voice code
+# 0016 · The brain packages import no voice code
 
 Date: 2026-11-16 · Status: accepted · Design: docs/design/layer-separation.md
 
 ## Decision
-- The agent service's brain routes (`apps/agent/src/orb_agent/server.py`: sessions, turns, models, the page) import no
-  LiveKit or Gemini code. The voice routes and checks live in `voice.py` (`VoiceChannel`), in the same process and at
-  the same URLs.
+- orb-discussion and the brain modules of orb-core import no LiveKit, Gemini or speech code.
+- The agent service's brain routes (`apps/agent/src/orb_agent/server.py`: sessions, turns, models, the page) have no
+  voice code of their own: the voice routes and checks live in `voice.py` (`VoiceChannel`), in the same process and at
+  the same URLs. `server.py` still imports `voice.py`, so the service needs `livekit` installed, as before.
 - The room-to-session rule (`orb-<session id>`) lives once, in `orb_core.rooms`, for both apps.
 - `tests/test_boundaries.py` enforces it: the brain never imports voice, packages never import an app, the two apps
   never import each other. `apps/agent/tests/test_contract.py` records every route and answer field.

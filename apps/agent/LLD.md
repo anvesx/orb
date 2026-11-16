@@ -5,7 +5,7 @@ Code: `src/orb_agent/` · Tests: `tests/test_server.py` (19), `tests/test_access
 
 **The agent service hosts every agent behind one HTTP API, serves the page (the voice call and the bench tools), and
 signs LiveKit tokens for voice. It serves this computer: a request from a tunnel or another device needs a key.**
-`server.py` holds the brain routes (sessions, turns, models, the page) and imports no voice code; `voice.py`
+`server.py` holds the brain routes (sessions, turns, models, the page) and has no voice code of its own; `voice.py`
 (`VoiceChannel`) holds the voice routes (token, status, Gemini Live instructions) and the voice checks of a session
 config. `tests/test_contract.py` records every route and answer field, so a move between the two changes none.
 Today it hosts one agent, `discussion`, with one instance for each LLM that a session asks for.
