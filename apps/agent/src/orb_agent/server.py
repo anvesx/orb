@@ -30,6 +30,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from orb_core import telemetry
 from orb_core.agent import CHANNELS, Event, InputError, SessionStore, check_session_id
 from orb_agent.access import AccessMiddleware, check_key
 from orb_agent.bench import make_router
@@ -212,7 +213,8 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
 
         async def stream():
             try:
-                async for ev in s.turn(body.text, body.channel, replace_last=body.replace_last):
+                async for ev in telemetry.traced(s.turn(body.text, body.channel, replace_last=body.replace_last), sid,
+                                                 body.channel, body.text):
                     yield ev.to_json() + "\n"
             except InputError as e:
                 yield Event("error", str(e)).to_json() + "\n"
@@ -258,7 +260,9 @@ def main():
     import uvicorn
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
-    uvicorn.run(build(), host="127.0.0.1", port=int(os.environ.get("ORB_AGENT_PORT", "8100")), log_level="warning")
+    app = build()
+    telemetry.start("orb-agent")
+    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("ORB_AGENT_PORT", "8100")), log_level="warning")
 
 
 if __name__ == "__main__":
