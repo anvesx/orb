@@ -1,13 +1,11 @@
-"""Settings of the voice worker, and the room-to-session rule.
+"""Settings of the voice worker.
 
 Settings come from the environment. The repo .env fills in only ORB_* and LIVEKIT_* keys that are not set, so other
 secrets in that file (for example a Cloudflare token) never enter the worker process.
 """
 from __future__ import annotations
 
-import hashlib
 import os
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -15,17 +13,8 @@ from urllib.parse import urlparse
 from orb_core.config import load_env_prefixes
 
 DEV_KEY, DEV_SECRET = "devkey", "secret"  # the public credentials of `livekit-server --dev`
-ROOM_PREFIX = "orb-"
-SESSION_ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,47}$")  # the same rule as orb_core.agent.check_session_id
 ENV_PREFIXES = ("ORB_", "LIVEKIT_")
 ENV_NAMES = ("GOOGLE_API_KEY",)  # by its exact name: the Gemini key (Gemini Live, docs/design/gemini-live.md)
-
-
-def session_for(room: str) -> str:
-    """Rooms that the web page makes are orb-<session id>. Any other room gets a stable session of its own."""
-    if room.startswith(ROOM_PREFIX) and SESSION_ID.match(room[len(ROOM_PREFIX):]):
-        return room[len(ROOM_PREFIX):]
-    return "room-" + hashlib.sha256(room.encode()).hexdigest()[:12]
 
 
 def check_livekit(env=os.environ) -> None:

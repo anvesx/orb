@@ -26,8 +26,9 @@ from livekit.agents.voice.agent_session import SessionConnectOptions
 from livekit.plugins import silero
 
 from orb_core import gemini
+from orb_core.rooms import session_for
 from orb_voice import gemini_live
-from orb_voice.config import Settings, check_livekit, load_repo_env, session_for
+from orb_voice.config import Settings, check_livekit, load_repo_env
 from orb_voice.plugins import (FirstClauseTokenizer, LiveSTT, OrbLLM, OrbSTT, OrbTTS, TurnTracker, polish_text,
                                stt_engines_info)
 

@@ -39,17 +39,17 @@ apps/agent/src/orb_agent/server.py  (one create_app)
 ```
                  ┌────────────── channels ──────────────┐
   browser text ─▶│ server.py: brain routes + page        │
-                 │ voice.py:  voice routes (router)      │◀─ only included when voice is on
+                 │ voice.py:  voice routes (VoiceChannel)│◀─ same routes as before, voice on or off
                  └──────────────────┬───────────────────┘
                                     ▼
                  brain: orb_core.agent · orb_discussion   (no voice import, enforced by a test)
 ```
 - `server.py` keeps the brain routes, the page, `build()` and `main()`. It no longer imports `orb_core.gemini`.
-- `voice.py` (exists: LiveKit config, tokens, probes) gets `make_router(...)`, the same pattern as
-  `bench.make_router` and `livekit_proxy.make_router`. It owns: `/v1/voice/token`, `/v1/voice/status`,
+- `voice.py` (exists: LiveKit config, tokens, probes) gets a `VoiceChannel` whose `.router(session_or_404)` is
+  included like `bench.make_router` and `livekit_proxy.make_router`. It owns: `/v1/voice/token`, `/v1/voice/status`,
   `/v1/sessions/{id}/instructions`, the voice fields of a session config (Gemini checks, `--gemini` rules), the warm
-  decision, and the `gemini` part of `/v1/models`. `server.py` takes two small hooks from it: `check_config(config)`
-  and `warms(config)`.
+  decision, and the `gemini` part of `/v1/models`. `server.py` asks it `.check(config)`, `.warms(config)`, `.status()`
+  and `.models()`.
 - The room contract (`room_for`, `session_for`, the prefix) lives once in `orb_core`, used by both apps.
 
 **Not in this PR (each would be a behavior change, or a split for its own sake):**
@@ -67,7 +67,7 @@ one agent at a time. No orb voice pipeline run (it hangs the Mac); Gemini-only r
 | # | Ticket | Done when |
 |---|---|---|
 | LS-0 | **Safety net first.** (a) A route snapshot test: every method+path of `create_app` with voice on and with voice off, and the keys of `/v1/models`, `/health`, a session state. (b) A boundary test over the source tree (ast imports): `orb_core.agent`, `orb_core.jev`, `orb_core.ollama`, `orb_core.web`, `orb_discussion` never import `livekit`, `orb_voice`, `orb_agent`, `orb_core.gemini`; `apps/agent` never imports `orb_voice`; `apps/voice-agent` never imports `orb_agent` or `orb_discussion`; `orb_agent.server` never imports `orb_core.gemini` or `livekit` (marked xfail until LS-1). | both green on main's code (the server rule xfail); baseline count recorded below |
-| LS-1 | **Voice routes out of `server.py` into `voice.make_router`** (P1). Moved code keeps its body. `create_app` signature unchanged; the router is included when `voice` is set or Gemini is offered (same routes as today in every case, proven by LS-0a). | snapshot unchanged; server rule passes (xfail removed); poteto blast-radius review |
+| LS-1 | **Voice routes out of `server.py` into `voice.VoiceChannel`** (P1). Moved code keeps its body. `create_app` signature unchanged; the router is always included, as the routes were before (proven by LS-0a). | snapshot unchanged; server rule passes (xfail removed); poteto blast-radius review |
 | LS-2 | **One room contract** (P2): `orb_core/rooms.py` with `ROOM_PREFIX`, `room_for`, `session_for`; both apps import it; the two copies go. | `test_session_for_*` passes unchanged; poteto review |
 | LS-3 | **Comments.** In the files this PR touches only: drop comments that repeat the code or tell history ("the first test…"); keep the ones that say why. | diff is comments only (an ast compare of each file shows no code change) |
 | LS-4 | **Docs.** README: a high-level diagram (channels → brain: Jev reads → debt rules → one of six personas → LLM → check; voice modes; speech service). `docs/architecture.md` layers, the two LLDs, decision 0016. | links work; numbers unchanged |

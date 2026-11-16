@@ -1,9 +1,9 @@
 """The voice channel of the agent service: LiveKit room tokens and status, and the Gemini Live settings and prompt of
 a session. The brain routes (server.py) know nothing of voice; they ask `VoiceChannel.check` and `.warms`.
 
-The agent service only signs tokens for rooms of sessions that exist. With no LIVEKIT_API_KEY and a loopback LIVEKIT_URL, it uses the public credentials of `livekit-server --dev`
-(devkey / secret). Those are for this machine only. Any other server needs its own key and a secret of 32 or
-more characters.
+The agent service only signs tokens for rooms of sessions that exist. With no LIVEKIT_API_KEY and a loopback
+LIVEKIT_URL, it uses the public credentials of `livekit-server --dev` (devkey / secret). Those are for this machine
+only. Any other server needs its own key and a secret of 32 or more characters.
 """
 from __future__ import annotations
 
@@ -20,15 +20,11 @@ from livekit import api as lkapi
 from pydantic import BaseModel
 
 from orb_core import gemini
+from orb_core.rooms import room_for
 from orb_agent import livekit_proxy
 
-ROOM_PREFIX = "orb-"
 DEV_KEY, DEV_SECRET = "devkey", "secret"
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
-
-
-def room_for(session_id: str) -> str:
-    return ROOM_PREFIX + session_id
 
 
 def is_local(url: str) -> bool:
@@ -138,13 +134,17 @@ class VoiceChannel:
         return config.get("voice_mode") != "gemini-live" and not self.gemini_only
 
     async def status(self) -> dict | None:
-        voice, probe, livekit_probe = self.voice, self.probe, self.livekit_probe
+        voice, probe = self.voice, self.probe
         if voice is None:
             return None
-        server = livekit_probe(voice.server) if livekit_probe else probe(*host_port(voice.server)) if probe else unknown()
+        if self.livekit_probe:
+            server = self.livekit_probe(voice.server)
+        else:
+            server = probe(*host_port(voice.server)) if probe else unknown()
         worker = probe("127.0.0.1", self.worker_port) if probe and self.worker_port else unknown()
         livekit, worker = await asyncio.gather(server, worker)
-        return {"url": voice.url, "dev": voice.dev, "local": voice.local, "proxy": self.proxy, "livekit": livekit, "worker": worker}
+        return {"url": voice.url, "dev": voice.dev, "local": voice.local, "proxy": self.proxy, "livekit": livekit,
+                "worker": worker}
 
     def models(self) -> dict:
         return {"available": self.gemini_available(), "only": self.gemini_only, "models": gemini.MODELS, "default_model": gemini.DEFAULT_MODEL,
