@@ -28,6 +28,8 @@ def start(service: str):
     key = os.environ.get(KEY, "").strip()
     if not key:
         return None
+    if _providers:
+        return _providers[0]
     from opentelemetry import metrics, trace
     from opentelemetry._logs import set_logger_provider
     from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
@@ -65,8 +67,8 @@ def flush() -> None:
 
 async def traced(events: AsyncIterator[Event], sid: str, channel: str, text: str,
                  provider=None) -> AsyncIterator[Event]:
-    """Passes the events of one turn on unchanged and records them as an `orb.turn` span, with `jev.read` and `llm`
-    child spans placed by the turn's timing."""
+    """Passes the events of one turn on unchanged and records them as an `orb.turn` span, with `jev.read`, `llm` and
+    `jev.read_ai` child spans placed by the turn's timing."""
     provider = provider or (_providers[0] if _providers else None)
     if provider is None:
         async for ev in events:
@@ -81,13 +83,14 @@ async def traced(events: AsyncIterator[Event], sid: str, channel: str, text: str
     parent = trace.set_span_in_context(span)
     if words:
         span.set_attribute("orb.text", text)
-    read_end = None
+    read_end = reply_at = None
     try:
         async for ev in events:
             now = time.time_ns()
             data = ev.data if isinstance(ev.data, dict) else {}
-            if ev.type == "decision":
+            if ev.type == "read":
                 read_end = now
+            elif ev.type == "decision":
                 for k in ("persona", "debt", "kind", "stage"):
                     if data.get(k) is not None:
                         span.set_attribute(f"orb.{k}", str(data[k]))
@@ -106,20 +109,23 @@ async def traced(events: AsyncIterator[Event], sid: str, channel: str, text: str
                     if timing.get("llm_first_token") is not None:
                         llm.set_attribute("orb.first_token", timing["llm_first_token"])
                     llm.end(end_time=now)
+                reply_at = now
                 span.set_attribute("orb.reply_chars", len(data.get("text") or ""))
                 if words:
                     span.set_attribute("orb.reply", data.get("text") or "")
             elif ev.type == "check":
+                if reply_at is not None:
+                    tracer.start_span("jev.read_ai", context=parent, start_time=reply_at).end(end_time=now)
                 if data.get("done") is not None:
                     span.set_attribute("orb.check_done", bool(data["done"]))
             elif ev.type == "error":
-                span.set_status(Status(StatusCode.ERROR, str(ev.data)))
+                span.set_status(Status(StatusCode.ERROR, str(ev.data) if words else "error"))
             yield ev
     except (GeneratorExit, asyncio.CancelledError):
         span.set_attribute("orb.cancelled", True)
         raise
     except Exception as e:
-        span.set_status(Status(StatusCode.ERROR, f"{type(e).__name__}: {e}"))
+        span.set_status(Status(StatusCode.ERROR, f"{type(e).__name__}: {e}" if words else type(e).__name__))
         raise
     finally:
         span.end()

@@ -59,7 +59,7 @@ reader, a streaming Ollama client, the agent interface with its session store, a
 | Repo root | the nearest folder with `packages/python/orb-core` | `test_repo_root_finds_the_orb_core_folder` |
 | Room names | `orb-<id>` maps to `<id>`; others to a stable `room-` hash; `room_for` maps back | `test_rooms.py` |
 | Protocols | test doubles satisfy `Agent` and `Session` | `test_agent.py::test_fakes_satisfy_the_protocols` |
-| Telemetry | off without a key; a turn is one span with `jev.read` and `llm` inside; no words unless `ORB_LOG_TEXT=1` | `test_telemetry.py` |
+| Telemetry | off without a key; a turn is one span with `jev.read`, `llm` and `jev.read_ai` inside; no words unless `ORB_LOG_TEXT=1` | `test_telemetry.py` |
 | Events | an unknown type is refused; JSON is stable | `test_event_rejects_unknown_types_and_serializes` |
 | Session IDs | `..`, spaces, capitals and long IDs are refused | `test_session_ids` |
 | Store | create, get, turn, save (no `.tmp` left) | `test_store_create_get_save` |

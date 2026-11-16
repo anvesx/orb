@@ -48,9 +48,9 @@ def test_a_turn_is_one_span_with_the_read_and_the_llm_inside(monkeypatch):
     provider, exporter = memory()
     assert run(TURN, provider) == TURN
     spans = {s.name: s for s in exporter.get_finished_spans()}
-    assert set(spans) == {"orb.turn", "jev.read", "llm"}
+    assert set(spans) == {"orb.turn", "jev.read", "llm", "jev.read_ai"}
     turn = spans["orb.turn"]
-    assert spans["jev.read"].parent.span_id == spans["llm"].parent.span_id == turn.context.span_id
+    assert {spans[n].parent.span_id for n in ("jev.read", "llm", "jev.read_ai")} == {turn.context.span_id}
     assert abs((spans["jev.read"].end_time - spans["jev.read"].start_time) / 1e9 - 0.5) < 1e-6
     assert abs((spans["llm"].end_time - spans["llm"].start_time) / 1e9 - 0.3) < 1e-6
     a = turn.attributes
@@ -68,8 +68,10 @@ def test_no_words_without_orb_log_text(monkeypatch):
     assert turn.attributes["orb.persona"] == "rival"
 
 
-def test_an_error_event_marks_the_turn():
-    provider, exporter = memory()
-    run([Event("error", "The LLM failed: down")], provider)
-    (turn,) = exporter.get_finished_spans()
-    assert turn.status.status_code == StatusCode.ERROR and "down" in turn.status.description
+def test_an_error_event_marks_the_turn(monkeypatch):
+    for flag, description in (("1", "The LLM failed: down"), ("0", "error")):
+        monkeypatch.setenv("ORB_LOG_TEXT", flag)
+        provider, exporter = memory()
+        run([Event("error", "The LLM failed: down")], provider)
+        (turn,) = exporter.get_finished_spans()
+        assert (turn.status.status_code, turn.status.description) == (StatusCode.ERROR, description)

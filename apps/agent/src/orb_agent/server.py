@@ -213,8 +213,8 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
 
         async def stream():
             try:
-                async for ev in telemetry.traced(s.turn(body.text, body.channel, replace_last=body.replace_last), sid,
-                                                 body.channel, body.text):
+                events = s.turn(body.text, body.channel, replace_last=body.replace_last)
+                async for ev in telemetry.traced(events, sid, body.channel, body.text):
                     yield ev.to_json() + "\n"
             except InputError as e:
                 yield Event("error", str(e)).to_json() + "\n"
