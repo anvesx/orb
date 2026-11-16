@@ -40,6 +40,7 @@ test-py:
 	cd packages/python/orb-bench && $(PY) -m pytest -q
 	cd apps/agent && $(PY) -m pytest -q -W ignore::jwt.warnings.InsecureKeyLengthWarning
 	cd apps/voice-agent && $(PY) -m pytest -q
+	cd tests && $(PY) -m pytest -q
 
 dev:
 	scripts/dev.sh
