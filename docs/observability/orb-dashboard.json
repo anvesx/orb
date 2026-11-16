@@ -1,0 +1,58 @@
+{
+  "name": "orb",
+  "description": "Calls, Gemini turns, brain turns, transcripts and errors of orb (docs/design/observability.md).",
+  "permissions": "PRIVATE",
+  "pages": [
+    {
+      "name": "Calls",
+      "widgets": [
+        {"title": "Calls", "layout": {"column": 1, "row": 1, "width": 3, "height": 3}, "viz": "viz.billboard",
+         "query": "FROM Span SELECT count(*) AS 'calls' WHERE service.name = 'orb-voice' AND name = 'agent_session' SINCE 1 day ago COMPARE WITH 1 day ago"},
+        {"title": "Average call length (s)", "layout": {"column": 4, "row": 1, "width": 3, "height": 3}, "viz": "viz.billboard",
+         "query": "FROM Span SELECT average(duration.ms) / 1000 AS 'seconds' WHERE service.name = 'orb-voice' AND name = 'agent_session' SINCE 1 day ago"},
+        {"title": "Model turns", "layout": {"column": 7, "row": 1, "width": 3, "height": 3}, "viz": "viz.billboard",
+         "query": "FROM Span SELECT count(*) AS 'turns' WHERE service.name = 'orb-voice' AND name IN ('realtime_inference', 'llm_request') SINCE 1 day ago"},
+        {"title": "Errors", "layout": {"column": 10, "row": 1, "width": 3, "height": 3}, "viz": "viz.billboard",
+         "query": "FROM Log SELECT count(*) AS 'errors' WHERE service.name IN ('orb-voice', 'orb-agent') AND severity.text IN ('ERROR', 'CRITICAL') SINCE 1 day ago"},
+        {"title": "Calls over time", "layout": {"column": 1, "row": 4, "width": 6, "height": 3}, "viz": "viz.line",
+         "query": "FROM Span SELECT count(*) WHERE service.name = 'orb-voice' AND name = 'agent_session' SINCE 7 days ago TIMESERIES AUTO"},
+        {"title": "Gemini turn time (ms): p50, p90", "layout": {"column": 7, "row": 4, "width": 6, "height": 3}, "viz": "viz.line",
+         "query": "FROM Span SELECT percentile(duration.ms, 50, 90) WHERE service.name = 'orb-voice' AND name = 'realtime_inference' SINCE 1 day ago TIMESERIES AUTO"},
+        {"title": "Gemini tokens", "layout": {"column": 1, "row": 7, "width": 6, "height": 3}, "viz": "viz.area",
+         "query": "FROM Span SELECT sum(gen_ai.usage.input_tokens) AS 'input', sum(gen_ai.usage.output_tokens) AS 'output' WHERE service.name = 'orb-voice' AND name = 'realtime_inference' SINCE 1 day ago TIMESERIES AUTO"},
+        {"title": "Voice worker stalls (event loop blocked)", "layout": {"column": 7, "row": 7, "width": 6, "height": 3}, "viz": "viz.bar",
+         "query": "FROM Span SELECT count(*) WHERE service.name = 'orb-voice' AND name = 'event_loop_blocked' FACET job_id SINCE 1 day ago LIMIT 10"},
+        {"title": "Transcript (words only with ORB_LOG_TEXT=1)", "layout": {"column": 1, "row": 10, "width": 12, "height": 5}, "viz": "viz.table",
+         "query": "FROM Log SELECT session, message AS 'who', text WHERE service.name = 'orb-voice' AND message IN ('user words', 'Gemini words') SINCE 1 day ago LIMIT 200"},
+        {"title": "Warnings and errors", "layout": {"column": 1, "row": 15, "width": 12, "height": 4}, "viz": "viz.table",
+         "query": "FROM Log SELECT service.name, severity.text, message WHERE service.name IN ('orb-voice', 'orb-agent') AND severity.text IN ('WARN', 'WARNING', 'ERROR', 'CRITICAL') AND message NOT LIKE 'event loop blocked%' SINCE 1 day ago LIMIT 100"}
+      ]
+    },
+    {
+      "name": "Brain turns",
+      "widgets": [
+        {"title": "Turns by persona", "layout": {"column": 1, "row": 1, "width": 4, "height": 3}, "viz": "viz.pie",
+         "query": "FROM Span SELECT count(*) WHERE service.name = 'orb-agent' AND name = 'orb.turn' FACET orb.persona SINCE 7 days ago"},
+        {"title": "Turn steps (s): Jev read, LLM first token, LLM total", "layout": {"column": 5, "row": 1, "width": 8, "height": 3}, "viz": "viz.line",
+         "query": "FROM Span SELECT average(orb.timing.read_human) AS 'Jev read', average(orb.timing.llm_first_token) AS 'LLM first token', average(orb.timing.llm_total) AS 'LLM total' WHERE service.name = 'orb-agent' AND name = 'orb.turn' SINCE 1 day ago TIMESERIES AUTO"},
+        {"title": "Turns by channel", "layout": {"column": 1, "row": 4, "width": 4, "height": 3}, "viz": "viz.bar",
+         "query": "FROM Span SELECT count(*) WHERE service.name = 'orb-agent' AND name = 'orb.turn' FACET orb.channel SINCE 7 days ago"},
+        {"title": "Debts paid (check done)", "layout": {"column": 5, "row": 4, "width": 4, "height": 3}, "viz": "viz.pie",
+         "query": "FROM Span SELECT count(*) WHERE service.name = 'orb-agent' AND name = 'orb.turn' AND orb.check_done IS NOT NULL FACET orb.check_done SINCE 7 days ago"},
+        {"title": "Failed or cancelled turns", "layout": {"column": 9, "row": 4, "width": 4, "height": 3}, "viz": "viz.bar",
+         "query": "FROM Span SELECT filter(count(*), WHERE otel.status_code = 'ERROR') AS 'failed', filter(count(*), WHERE orb.cancelled IS TRUE) AS 'cancelled' WHERE service.name = 'orb-agent' AND name = 'orb.turn' SINCE 7 days ago"},
+        {"title": "Turns (words only with ORB_LOG_TEXT=1)", "layout": {"column": 1, "row": 7, "width": 12, "height": 5}, "viz": "viz.table",
+         "query": "FROM Span SELECT orb.session, orb.persona, orb.debt, orb.text, orb.reply, orb.timing.llm_total WHERE service.name = 'orb-agent' AND name = 'orb.turn' SINCE 1 day ago LIMIT 100"}
+      ]
+    },
+    {
+      "name": "Agent service",
+      "widgets": [
+        {"title": "Requests by route", "layout": {"column": 1, "row": 1, "width": 6, "height": 4}, "viz": "viz.bar",
+         "query": "FROM Span SELECT count(*) WHERE service.name = 'orb-agent' AND span.kind = 'server' FACET name SINCE 1 day ago LIMIT 20"},
+        {"title": "Route time (ms): p50, p95", "layout": {"column": 7, "row": 1, "width": 6, "height": 4}, "viz": "viz.table",
+         "query": "FROM Span SELECT percentile(duration.ms, 50, 95), count(*) WHERE service.name = 'orb-agent' AND span.kind = 'server' FACET name SINCE 1 day ago LIMIT 20"}
+      ]
+    }
+  ]
+}

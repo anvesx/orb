@@ -34,6 +34,7 @@ Another OTel backend needs only another endpoint and key, not code.
 | OB-3 | Voice worker: env names, the tracer hook, flush on shutdown |
 | OB-4 | Docs: README, `.env.example`, LLDs, decision 0017 |
 | OB-5 | Live Gemini call, data seen in New Relic, last review, PR |
+| OB-6 | The orb dashboard as a file (`docs/observability/orb-dashboard.json`) and `scripts/newrelic_dashboard.py`, which creates or updates it through NerdGraph |
 
 ## 5. Baseline (main, 38822eb)
 `make test` on 2026-11-16, all green: orb-core 24, orb-discussion 39, orb-speech 2,445 (3 skipped), orb-bench 24,

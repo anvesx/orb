@@ -61,7 +61,8 @@ this computer, so a device needs a network path to it. See [decision 0009](docs/
 
 **A dashboard of calls and turns:** set `NEW_RELIC_LICENSE_KEY` in `.env` (a free New Relic account). The agent
 service and the voice worker then send traces, metrics and logs over OpenTelemetry: each call's steps and timings,
-each turn's persona, and the words only with `ORB_LOG_TEXT=1`. Without the key nothing is sent. See
+each turn's persona, and the words only with `ORB_LOG_TEXT=1`. Without the key nothing is sent.
+`scripts/newrelic_dashboard.py` makes the orb dashboard from `docs/observability/orb-dashboard.json`. See
 [decision 0017](docs/decisions/0017-observability-otel-new-relic.md).
 
 ## Layout
