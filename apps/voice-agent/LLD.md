@@ -28,7 +28,7 @@ Errors reach the page once, in words (`gemini_live.explain`): key refused, quota
 | The session config `{stt_engine, llm_model, tts_engine, tts_voice, tts_style, tts_lang, voice_mode, gemini_model, gemini_voice}` | `PUT /v1/sessions/{id}` of the agent service, at join | checked by the agent service |
 | Settings (table in section 3) | the environment; the repo `.env` fills in only unset `ORB_*` and `LIVEKIT_*` keys and `GOOGLE_API_KEY` | the operator |
 
-The room name gives the session: `orb-<id>` is the session `<id>` (3 to 48 of `a-z 0-9 -`); any other room gets
+The room name gives the session (`orb_core.rooms`, shared with the agent service): `orb-<id>` is the session `<id>` (3 to 48 of `a-z 0-9 -`); any other room gets
 `room-` + the first 12 hex digits of its SHA-256.
 
 ## 2. Algorithm
@@ -96,7 +96,7 @@ The room name gives the session: `orb-<id>` is the session `<id>` (3 to 48 of `a
 ## 4. Test cases
 | Case | Expected result | Test |
 |---|---|---|
-| Room names | `orb-<id>` maps to `<id>`; others to a stable `room-` hash | `test_session_for_rooms_of_the_web_page_and_others` |
+| Room names | `orb-<id>` maps to `<id>`; others to a stable `room-` hash | `orb-core/tests/test_rooms.py` |
 | Repo `.env` | only `ORB_*` and `LIVEKIT_*` keys, never over a set value | `test_repo_env_copies_only_orb_and_livekit_keys` |
 | Settings | defaults and overrides from the environment | `test_settings_defaults_and_overrides` |
 | Cloud STT cadence | slower than the local cadence; an override | `test_a_cloud_stt_gets_a_slower_interim_cadence` |
@@ -163,7 +163,7 @@ Next steps, with their expected gain:
 | The LLM thinks silently first | the first word comes after 3 to 11 s on short lines such as "Can you hear me clearly?" (gemma4:e2b) | hidden tokens; choose another LLM in the bar (decision 0007) |
 | A cloud STT is chosen | interim calls every 1.0 s; barge-in is slower (about 1.0 to 1.5 s) | the interruption needs 2 words in the interim text |
 | A heavy TTS engine (maya1, indic-speak) | the reply stutters | slower than real time on this Mac (decision 0007) |
-| A room that the web page did not make | a session of its own, `room-<hash>` | `session_for` |
+| A room that the web page did not make | a session of its own, `room-<hash>` | `orb_core.rooms.session_for` |
 
 ## 8. Expected results
 - `scripts/dev.sh` prints `ready voice` and the worker log shows `agent session ready` for each room.

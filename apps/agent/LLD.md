@@ -1,10 +1,13 @@
 # LLD: apps/agent (the agent service and the web chat)
 
 Code: `src/orb_agent/` · Tests: `tests/test_server.py` (19), `tests/test_access.py` (13), `tests/test_livekit_proxy.py` (6),
-`tests/test_bench.py` (4) · Status: built · Last update: 2026-10-23
+`tests/test_bench.py` (4), `tests/test_contract.py` (3) · Status: built · Last update: 2026-11-16
 
 **The agent service hosts every agent behind one HTTP API, serves the page (the voice call and the bench tools), and
 signs LiveKit tokens for voice. It serves this computer: a request from a tunnel or another device needs a key.**
+`server.py` holds the brain routes (sessions, turns, models, the page) and imports no voice code; `voice.py`
+(`VoiceChannel`) holds the voice routes (token, status, Gemini Live instructions) and the voice checks of a session
+config. `tests/test_contract.py` records every route and answer field, so a move between the two changes none.
 Today it hosts one agent, `discussion`, with one instance for each LLM that a session asks for.
 
 ## 1. Input

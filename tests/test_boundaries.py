@@ -30,7 +30,7 @@ def offenders(paths, banned) -> list[str]:
 
 
 def test_the_brain_imports_no_voice():
-    brain = [CORE / f for f in ("agent.py", "config.py", "jev.py", "ollama.py", "web.py")]
+    brain = [CORE / f for f in ("agent.py", "config.py", "jev.py", "ollama.py", "rooms.py", "web.py")]
     assert offenders(brain + files(ROOT / "packages/python/orb-discussion/src"), VOICE) == []
 
 
