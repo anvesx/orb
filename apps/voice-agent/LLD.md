@@ -70,6 +70,9 @@ The room name gives the session (`orb_core.rooms`, shared with the agent service
    reply is cut and the new turn begins.
 8. **Report:** every state change, transcript and metric goes to the room's data channel (topic `orb.bench`). The log
    has sizes and timings, and words only with `ORB_LOG_TEXT=1`.
+9. **Telemetry:** with `NEW_RELIC_LICENSE_KEY`, each worker process hands an OpenTelemetry tracer to LiveKit Agents,
+   which traces the call (VAD, STT, LLM, TTS, Gemini realtime, tokens); the orb log lines go too. A call's spans are
+   flushed when it ends (docs/design/observability.md).
 
 ## 3. Maths
 | Setting | Value | Env | Source |
@@ -127,7 +130,7 @@ The room name gives the session (`orb_core.rooms`, shared with the agent service
   than 32 characters, unless `LIVEKIT_URL` is on this machine (the agent service has the same rule).
 - **A cloud STT sends the audio of the call away** (decision 0008): only when the session chose it (the bar of the
   page), and the worker logs a warning at the start of the call. The key is in the speech service, not in this worker.
-- **Words stay out of the log** unless `ORB_LOG_TEXT=1`. The data channel carries the transcripts to the room's own
+- **Words stay out of the log and of New Relic** unless `ORB_LOG_TEXT=1`. The data channel carries the transcripts to the room's own
   participants (the person and the bench page).
 - **Debug audio** (`ORB_DEBUG_AUDIO_DIR`) saves real voices as WAV and text, mode 0600 in a 0700 folder. It is off
   by default and must be on only with the person's consent.

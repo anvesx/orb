@@ -1,6 +1,6 @@
 # Observability: traces, metrics and logs in New Relic
 
-Status: building · Branch: `feat/new-relic-observability` · Date: 2026-11-16
+Status: built · Branch: `feat/new-relic-observability` · Date: 2026-11-16
 
 ## 1. Goal
 One dashboard that shows what happened in a call or a chat: what the person said, the persona that answered, the reply,
