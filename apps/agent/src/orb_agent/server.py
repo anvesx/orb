@@ -23,7 +23,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import secrets
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -31,12 +30,10 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from orb_core import gemini
 from orb_core.agent import CHANNELS, Event, InputError, SessionStore, check_session_id
-from orb_agent import livekit_proxy
 from orb_agent.access import AccessMiddleware, check_key
 from orb_agent.bench import make_router
-from orb_agent.voice import VoiceConfig, host_port, is_local, listening, livekit_answers, room_for
+from orb_agent.voice import VoiceChannel, VoiceConfig, listening, livekit_answers
 
 log = logging.getLogger("orb.agent")
 STATIC = Path(__file__).parent / "static"
@@ -68,27 +65,17 @@ class TurnIn(BaseModel):
     replace_last: bool = False  # voice: the last turn was never heard, and `text` says that sentence further
 
 
-class VoiceIn(BaseModel):
-    session_id: str
-
-
 def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_agent=None, installed_models=None,
                default_model: str = "", speech_url: str | None = None, self_url: str = "http://127.0.0.1:8100",
                share_key: str | None = None, probe=None, worker_port: int | None = None, livekit_probe=None,
-               gemini_available=gemini.available, gemini_only: bool = False) -> FastAPI:
+               gemini_available=None, gemini_only: bool = False) -> FastAPI:
     """`model_agent(model)` makes an agent that uses another LLM; `installed_models()` lists the models it may use.
-    With `speech_url`, the bench API (bench.py) is on too. `share_key` lets a remote request in (access.py).
-    `probe(host, port)` says whether a server listens there: with it, the voice status tells whether the LiveKit server
-    and the voice worker (on `worker_port`) run. `livekit_probe(url)` checks the LiveKit server by its address instead
-    (a tunnel accepts a connection also when no server is behind it). Without a probe, the status does not check.
-    `gemini_available()` says whether the Gemini key is set (the "gemini-live" voice mode needs it). `gemini_only`
-    (`scripts/dev.sh --gemini`): the speech service and the LLM are not meant to run, so a voice session must be
-    gemini-live and no session warms the LLM."""
+    With `speech_url`, the bench API (bench.py) is on too. `share_key` lets a remote request in (access.py). The voice
+    arguments go to `VoiceChannel` (voice.py)."""
     app = FastAPI(title="orb agent", docs_url=None, redoc_url=None)
     app.add_middleware(AccessMiddleware, key=check_key(share_key))  # checked here: Starlette makes the middleware at the first request
-    proxy = voice is not None and is_local(voice.server)  # a LiveKit server on this computer: its signal goes through this service too
-    if proxy:
-        app.include_router(livekit_proxy.make_router(voice.server))
+    channel = VoiceChannel(voice, probe=probe, worker_port=worker_port, livekit_probe=livekit_probe,
+                           gemini_available=gemini_available, gemini_only=gemini_only)
     if speech_url:
         app.include_router(make_router(speech_url, self_url))
     configs: dict[str, dict] = {}  # session id -> its SessionConfig, without empty fields
@@ -110,6 +97,8 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
             raise HTTPException(404, f"There is no session {sid}. Start one with POST /v1/sessions.")
         return s
 
+    app.include_router(channel.router(session_or_404))
+
     async def agent_for(body: NewSession) -> str | None:
         """The agent of a new session: the default one, or one for the LLM that the config names."""
         model = body.config.llm_model if body.config else None
@@ -127,24 +116,15 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
         return {**s.state(), "config": configs.get(s.id, {})}
 
     def checked(config: SessionConfig | None) -> dict:
-        """The config without empty fields; 400 for a Gemini value that is not known or a Gemini mode without key."""
+        """The config without empty fields; the voice channel refuses voice values it cannot use (400)."""
         if config is None:
             return {}
-        why = gemini.check(config.voice_mode, config.gemini_model, config.gemini_voice)
-        if why:
-            raise HTTPException(400, why)
-        if gemini_only and config.voice_mode != "gemini-live" and (config.voice_mode or config.stt_engine or config.tts_engine):
-            raise HTTPException(400, "This orb runs for Gemini Live only (scripts/dev.sh --gemini): choose Mode > "
-                                     "Gemini Live, or restart scripts/dev.sh without --gemini for the orb pipeline.")
-        if config.voice_mode == "gemini-live" and not gemini_available():
-            raise HTTPException(400, f"Gemini Live needs {gemini.KEY} in the repo .env (a Gemini API key). "
-                                     "Set it and restart scripts/dev.sh.")
+        channel.check(config)
         return config.model_dump(exclude_none=True)
 
     def started(s, config: dict):
-        # a Gemini Live call never uses the LLM of the session: warming it would load gigabytes for nothing
         if hasattr(s, "prepare"):
-            later(s.prepare(warm=config.get("voice_mode") != "gemini-live" and not gemini_only))
+            later(s.prepare(warm=channel.warms(config)))
         return s
 
     async def save_after(s):
@@ -162,17 +142,6 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
     async def bench_page():  # the bench tools are tabs of the chat page now
         return RedirectResponse("/", status_code=307)
 
-    async def unknown():
-        return None
-
-    async def voice_status() -> dict | None:
-        if voice is None:
-            return None
-        server = livekit_probe(voice.server) if livekit_probe else probe(*host_port(voice.server)) if probe else unknown()
-        worker = probe("127.0.0.1", worker_port) if probe and worker_port else unknown()
-        livekit, worker = await asyncio.gather(server, worker)
-        return {"url": voice.url, "dev": voice.dev, "local": voice.local, "proxy": proxy, "livekit": livekit, "worker": worker}
-
     @app.get("/health")
     async def health():
         agents = {}
@@ -181,11 +150,7 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
                 agents[name] = await agent.health()
             except Exception as e:
                 agents[name] = {"error": f"{type(e).__name__}: {e}"}
-        return {"ok": True, "agents": agents, "sessions": len(store.list()), "voice": await voice_status()}
-
-    @app.get("/v1/voice/status")
-    async def voice_state():  # light: the page asks for it each time that a person presses Talk
-        return await voice_status()
+        return {"ok": True, "agents": agents, "sessions": len(store.list()), "voice": await channel.status()}
 
     @app.post("/v1/sessions", status_code=201)
     async def create(body: NewSession):
@@ -202,8 +167,7 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
     @app.get("/v1/models")
     async def models():
         return {"llm": {"default": default_model, "installed": await installed_models() if installed_models else []},
-                "gemini": {"available": gemini_available(), "only": gemini_only, "models": gemini.MODELS, "default_model": gemini.DEFAULT_MODEL,
-                           "voices": gemini.VOICES, "default_voice": gemini.DEFAULT_VOICE}}
+                "gemini": channel.models()}
 
     @app.put("/v1/sessions/{sid}/config")
     async def set_config(sid: str, body: SessionConfig):
@@ -214,15 +178,6 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
         # checked as a whole: a change of gemini_model alone in a gemini-live session still needs the key
         configs[sid] = checked(SessionConfig(**{**old, **body.model_dump(exclude_none=True)}))
         return configs[s.id]
-
-    @app.get("/v1/sessions/{sid}/instructions")
-    async def instructions(sid: str):
-        """The system prompt of a Gemini Live call: orb's prompt for the topic and its source, and the voice rules."""
-        s = session_or_404(sid)
-        if not hasattr(s, "realtime_prompt"):
-            raise HTTPException(400, f"The agent of session {sid} has no prompt for Gemini Live.")
-        await s.prepare(warm=False)  # the source named in the topic, when the session has not loaded it yet
-        return {"instructions": s.realtime_prompt() + "\n" + gemini.VOICE_RULES.strip()}
 
     @app.get("/v1/sessions")
     async def listing():
@@ -265,15 +220,6 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
                 later(save_after(s))
 
         return StreamingResponse(stream(), media_type="application/x-ndjson")
-
-    @app.post("/v1/voice/token")
-    async def voice_token(body: VoiceIn):
-        if voice is None:
-            raise HTTPException(503, "Voice is off: set LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET.")
-        s = session_or_404(body.session_id)
-        identity = "user-" + secrets.token_hex(4)
-        room = room_for(s.id)
-        return {"url": voice.url, "room": room, "identity": identity, "token": voice.token(room, identity)}
 
     @app.exception_handler(HTTPException)
     async def http_error(request, exc):

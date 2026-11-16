@@ -3,8 +3,6 @@ an app, and the two apps never import each other. Read from the source with ast,
 import ast
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[1]
 CORE = ROOT / "packages/python/orb-core/src/orb_core"
 AGENT = ROOT / "apps/agent/src/orb_agent"
@@ -45,6 +43,5 @@ def test_the_apps_do_not_import_each_other():
     assert offenders(files(ROOT / "apps/voice-agent/src"), ("orb_agent", "orb_discussion")) == []
 
 
-@pytest.mark.xfail(strict=True, reason="LS-1 moves the voice routes into voice.py")
 def test_the_brain_routes_import_no_voice():
     assert offenders([AGENT / "server.py"], ("livekit", "orb_core.gemini", "orb_agent.livekit_proxy")) == []
