@@ -482,3 +482,32 @@ def test_gemini_only_refuses_an_orb_voice_session_and_never_warms(tmp_path):
     assert c.put(f"/v1/sessions/{sid}/config", json={"voice_mode": "gemini-live"}).status_code == 200
     c.get("/v1/sessions")
     assert llm.warmed == 0
+
+
+def test_another_writer_gets_notes_and_sends_its_replies(app_and_dir):
+    app, folder = app_and_dir
+    c = local(app)
+    sid = c.post("/v1/sessions", json={"topic": "Should our assistant store passwords?"}).json()["id"]
+    r = c.post(f"/v1/sessions/{sid}/notes", json={"text": "We should store passwords in a JSON file."})
+    assert r.status_code == 200 and set(r.json()) == {"read", "decision"}
+    assert r.json()["decision"]["persona"] == "Rival"
+    r = c.post(f"/v1/sessions/{sid}/replies", json={"text": "Hashing is safer.", "interrupted": True})
+    assert r.status_code == 200 and set(r.json()) == {"check", "state"} and r.json()["check"]["done"] is True
+    messages = c.get(f"/v1/sessions/{sid}").json()["messages"]
+    assert [(m["speaker"], m["channel"], m["interrupted"]) for m in messages] == [("human", "voice", False),
+                                                                                ("ai", "voice", True)]
+    assert c.post(f"/v1/sessions/{sid}/notes", json={"text": "hi", "channel": "fax"}).status_code == 400
+    assert c.post(f"/v1/sessions/{sid}/notes", json={"text": "   "}).status_code == 400
+    assert c.post("/v1/sessions/nope-404/notes", json={"text": "hi"}).status_code == 404
+
+
+def test_a_reader_failure_on_a_note_is_a_502(tmp_path):
+    class Down:
+        def system_one(self, state, questions):
+            raise RuntimeError("Jev is down")
+
+    agent = DiscussionAgent(Down(), FakeLLM(), load_source=lambda url: {})
+    c = local(create_app(SessionStore({"discussion": agent}, save_dir=tmp_path)))
+    sid = c.post("/v1/sessions", json={"topic": "T"}).json()["id"]
+    r = c.post(f"/v1/sessions/{sid}/notes", json={"text": "hello"})
+    assert r.status_code == 502 and "Jev is down" in r.json()["error"]

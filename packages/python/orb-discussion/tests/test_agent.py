@@ -4,7 +4,7 @@ import re
 
 from conftest import FakeLLM, ScriptedReader
 
-from orb_core.agent import Agent, Session
+from orb_core.agent import Agent, ReplyWriter, Session
 from orb_core.ollama import OllamaError
 from orb_discussion.agent import DiscussionAgent
 
@@ -258,3 +258,36 @@ def test_a_copied_note_never_reaches_the_person():
     assert spoken == "Could you tell me what you mean by that word?"
     assert s.messages[-1]["text"] == spoken  # the chat history is clean, so the leak cannot feed itself
     assert len(s.turns[0]["dropped_lines"]) == 2
+
+
+async def collect(events):
+    return [e async for e in events]
+
+
+def test_another_writer_gets_the_note_and_its_reply_is_checked():
+    script = [{"claims": 1, "new_option": 1}, {"new_option": 1, "disagrees": 1}]
+    agent, s, llm = make(script, [])
+    assert isinstance(s, ReplyWriter)
+    read, decision = asyncio.run(collect(s.note("We should store passwords in a JSON file.")))
+    assert (read.type, decision.type) == ("read", "decision")
+    assert decision.data["persona"] == "Rival" and decision.data["note"].startswith("This note is for your next reply")
+    assert "Length: 1 to 3 short sentences." in decision.data["note"]
+    check, state = asyncio.run(collect(s.add_reply("Hashing is safer: a leaked file shows nothing.")))
+    assert check.data["done"] is True and state.data["stage"] == "Test"
+    assert [m["speaker"] for m in s.messages] == ["human", "ai"] and len(s.engine.ledger.messages) == 2
+    assert s.turns[0]["ai"] == 1 and s.turns[0]["check"]["done"] is True
+    assert llm.prompts == [] and llm.warmed == 0  # no local LLM: the other model writes
+
+
+def test_a_reply_without_a_note_is_still_recorded_in_order():
+    agent, s, llm = make([{}], [])
+    check, _ = asyncio.run(collect(s.add_reply("Hello! What shall we discuss?")))
+    assert check.data["done"] is None and s.turns == []
+    assert [m["speaker"] for m in s.messages] == ["ai"] and len(s.engine.ledger.messages) == 1
+
+
+def test_a_reader_failure_on_a_note_changes_nothing():
+    agent, s, llm = make([RuntimeError("Jev is down")], [])
+    (error,) = asyncio.run(collect(s.note("Hello there.")))
+    assert error.type == "error" and "nothing changed" in error.data
+    assert s.messages == [] and s.engine.ledger.messages == []

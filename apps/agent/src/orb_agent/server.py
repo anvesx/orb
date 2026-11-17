@@ -8,6 +8,8 @@ GET  /v1/sessions/{id}[?since=v]                            -> the state, or {"v
 PUT  /v1/sessions/{id}            {"topic", "agent"?}       -> the state; creates the session when it is missing
 POST /v1/sessions/{id}/turns      {"text", "channel"?, "replace_last"?}
                                   -> NDJSON events: read, decision, token..., reply, check, state
+POST /v1/sessions/{id}/notes      {"text", "channel"?}      -> {"read", "decision"}: the persona note for another writer
+POST /v1/sessions/{id}/replies    {"text", "channel"?, "interrupted"?} -> {"check", "state"}: what that writer said
 GET  /v1/sessions/{id}/instructions                         -> {"instructions"}: the system prompt for Gemini Live
 GET  /v1/models                                             -> {"llm": {...}, "gemini": {available, models, voices, ...}}
 POST /v1/voice/token              {"session_id"}            -> {"url", "token", "room", "identity"}
@@ -31,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from orb_core import telemetry
-from orb_core.agent import CHANNELS, Event, InputError, SessionStore, check_session_id
+from orb_core.agent import CHANNELS, Event, InputError, ReplyWriter, SessionStore, check_session_id
 from orb_agent.access import AccessMiddleware, check_key
 from orb_agent.bench import make_router
 from orb_agent.voice import VoiceChannel, VoiceConfig, listening, livekit_answers
@@ -64,6 +66,15 @@ class TurnIn(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
     channel: str = "web"
     replace_last: bool = False  # voice: the last turn was never heard, and `text` says that sentence further
+
+
+class NoteIn(BaseModel):
+    text: str = Field(min_length=1, max_length=8000)
+    channel: str = "voice"
+
+
+class ReplyIn(NoteIn):
+    interrupted: bool = False
 
 
 def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_agent=None, installed_models=None,
@@ -222,6 +233,35 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
                 later(save_after(s))
 
         return StreamingResponse(stream(), media_type="application/x-ndjson")
+
+    def writer_or_400(sid: str, channel: str):
+        s = session_or_404(sid)
+        if not isinstance(s, ReplyWriter):
+            raise HTTPException(400, f"The agent of session {sid} writes its own replies.")
+        if channel not in CHANNELS:
+            raise HTTPException(400, f"channel must be one of {', '.join(CHANNELS)}.")
+        return s
+
+    async def answer(s, events) -> dict:
+        try:
+            out = {ev.type: ev.data async for ev in events}
+        except InputError as e:
+            raise HTTPException(400, str(e))
+        finally:
+            later(save_after(s))
+        if "error" in out:
+            raise HTTPException(502, out["error"])
+        return out
+
+    @app.post("/v1/sessions/{sid}/notes")
+    async def note(sid: str, body: NoteIn):
+        s = writer_or_400(sid, body.channel)
+        return await answer(s, telemetry.traced(s.note(body.text, body.channel), sid, body.channel, body.text))
+
+    @app.post("/v1/sessions/{sid}/replies")
+    async def reply(sid: str, body: ReplyIn):
+        s = writer_or_400(sid, body.channel)
+        return await answer(s, s.add_reply(body.text, body.channel, body.interrupted))
 
     @app.exception_handler(HTTPException)
     async def http_error(request, exc):

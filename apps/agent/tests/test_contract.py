@@ -13,7 +13,8 @@ from test_server import LOCAL, FakeLLM, ScriptedReader
 BRAIN_AND_PAGE = {
     "GET /", "GET /bench", "GET /health", "GET /openapi.json", "HEAD /openapi.json", "Mount /static",
     "GET /v1/models", "GET /v1/sessions", "POST /v1/sessions", "GET /v1/sessions/{sid}", "PUT /v1/sessions/{sid}",
-    "PUT /v1/sessions/{sid}/config", "POST /v1/sessions/{sid}/turns",
+    "PUT /v1/sessions/{sid}/config", "POST /v1/sessions/{sid}/turns", "POST /v1/sessions/{sid}/notes",
+    "POST /v1/sessions/{sid}/replies",
     "GET /v1/sessions/{sid}/instructions", "GET /v1/voice/status", "POST /v1/voice/token",
 }
 LIVEKIT_PROXY = {"APIWebSocketRoute /rtc", "APIWebSocketRoute /rtc/{rest:path}", "GET /rtc/{rest:path}"}
