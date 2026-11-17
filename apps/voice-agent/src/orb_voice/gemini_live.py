@@ -37,6 +37,8 @@ def options(cfg: dict) -> dict:
     extra = {}
     if model.endswith("-extended-thinking"):  # it refuses a session without a level (1007); the plain model refuses one
         extra["thinking_config"] = types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW)
+    if cfg.get("gemini_personas"):  # Gemini waits for the persona note before it speaks
+        extra["tool_behavior"] = types.Behavior.BLOCKING
     return {
         **extra,
         "model": model,
@@ -58,6 +60,10 @@ def make_model(cfg: dict) -> google.realtime.RealtimeModel:
     """The model of a Gemini Live call. It reads GOOGLE_API_KEY from the environment; nothing connects until the
     session starts."""
     return google.realtime.RealtimeModel(**options(cfg))
+
+
+def provider_tools(cfg: dict) -> list:
+    return [google.tools.GoogleSearch()] if cfg.get("gemini_search") else []
 
 
 def explain(error: object) -> str:

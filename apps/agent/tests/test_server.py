@@ -424,6 +424,8 @@ def test_a_gemini_session_never_warms_the_llm_and_an_orb_session_does(tmp_path):
     ({"voice_mode": "telepathy"}, "voice_mode must be one of"),
     ({"voice_mode": "gemini-live", "gemini_model": "gemini-1.0-pro"}, "gemini_model must be one of"),
     ({"voice_mode": "gemini-live", "gemini_voice": "Siri"}, "is not a Gemini voice"),
+    ({"voice_mode": "gemini-live", "gemini_model": "gemini-3.8-live-extended-thinking", "gemini_personas": True},
+     "The orb personas need gemini-3.8-live"),
 ])
 def test_unknown_gemini_values_are_refused(tmp_path, cfg, why):
     c, _ = gemini_app(tmp_path)
@@ -511,3 +513,13 @@ def test_a_reader_failure_on_a_note_is_a_502(tmp_path):
     sid = c.post("/v1/sessions", json={"topic": "T"}).json()["id"]
     r = c.post(f"/v1/sessions/{sid}/notes", json={"text": "hello"})
     assert r.status_code == 502 and "Jev is down" in r.json()["error"]
+
+
+def test_the_gemini_switches_are_kept_and_the_personas_model_is_checked_as_a_whole(tmp_path):
+    c, _ = gemini_app(tmp_path)
+    cfg = {"voice_mode": "gemini-live", "gemini_personas": True, "gemini_search": True}
+    sid = c.post("/v1/sessions", json={"topic": "T", "config": cfg}).json()["id"]
+    assert c.get(f"/v1/sessions/{sid}").json()["config"] == cfg
+    r = c.put(f"/v1/sessions/{sid}/config", json={"gemini_model": "gemini-3.8-live-extended-thinking"})
+    assert r.status_code == 400 and "personas" in r.json()["error"]
+    assert c.put(f"/v1/sessions/{sid}/config", json={"gemini_personas": False}).json()["gemini_personas"] is False

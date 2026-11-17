@@ -54,6 +54,8 @@ class SessionConfig(BaseModel):
     voice_mode: str | None = Field(default=None, max_length=16)
     gemini_model: str | None = Field(default=None, max_length=64)
     gemini_voice: str | None = Field(default=None, max_length=32)
+    gemini_personas: bool | None = None  # docs/design/gemini-personas.md
+    gemini_search: bool | None = None
 
 
 class NewSession(BaseModel):

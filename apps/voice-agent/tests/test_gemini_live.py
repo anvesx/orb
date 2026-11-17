@@ -100,8 +100,11 @@ class FakeBench:
 class Ctx:
     room = object()
 
+    def add_shutdown_callback(self, fn):
+        pass
 
-def gemini_call(monkeypatch, instructions_status=200):
+
+def gemini_call(monkeypatch, instructions_status=200, cfg=None):
     monkeypatch.setenv("GOOGLE_API_KEY", "fake-key-for-the-test")
     monkeypatch.setattr(main, "AgentSession", FakeSession)
     FakeSession.made = []
@@ -114,7 +117,7 @@ def gemini_call(monkeypatch, instructions_status=200):
     async def go():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
             s = main.Settings.from_env()
-            await main.gemini_call(Ctx(), http, s, "web-1", {"voice_mode": "gemini-live", "gemini_voice": "Kore"}, bench)
+            await main.gemini_call(Ctx(), http, s, "web-1", cfg or {"voice_mode": "gemini-live", "gemini_voice": "Kore"}, bench)
 
     asyncio.run(go())
     return FakeSession.made[0], bench
@@ -180,3 +183,24 @@ def test_gemini_replies_are_logged_with_text_only_when_text_logging_is_on(monkey
             session.fire("conversation_item_added", type("Ev", (), {"item": item})())
         rec = [r for r in caplog.records if r.getMessage() == "Gemini words"]
         assert len(rec) == 1 and rec[0].chars == 25 and (getattr(rec[0], "text", None) is not None) == has_text
+
+
+def test_personas_make_gemini_wait_for_the_note_and_search_adds_google():
+    assert gemini_live.options({"gemini_personas": True})["tool_behavior"].name == "BLOCKING"
+    assert "tool_behavior" not in gemini_live.options({"gemini_search": True})
+    assert gemini_live.provider_tools({}) == []
+
+
+def test_a_call_with_both_switches_has_both_tools_and_their_rules(monkeypatch):
+    session, bench = gemini_call(monkeypatch, cfg={"voice_mode": "gemini-live", "gemini_personas": True,
+                                                   "gemini_search": True})
+    agent = session.started[1]
+    assert {t.id for t in agent.tools} == {gemini.PERSONA_TOOL, "gemini_google_search"}
+    assert agent.instructions == "orb rules" + gemini.PERSONA_RULES + gemini.SEARCH_RULES
+    assert bench.sent[-1][1]["personas"] is True and bench.sent[-1][1]["search"] is True
+
+
+def test_a_call_without_the_switches_is_unchanged(monkeypatch):
+    session, bench = gemini_call(monkeypatch)
+    assert session.started[1].tools == [] and session.started[1].instructions == "orb rules"
+    assert "user_input_transcribed" in session.handlers and len(session.handlers["user_input_transcribed"]) == 1

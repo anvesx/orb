@@ -28,13 +28,27 @@ This is a voice call only: there is no chat, no typing, no files and no links. N
 to share a document that is not already in this prompt, say that they can read out the part they want to discuss.
 When you did not hear the person clearly, ask them to say it again."""
 
+PERSONA_TOOL = "get_persona_note"
+# Added with the session switches (docs/design/gemini-personas.md).
+PERSONA_RULES = f"""
+Before every reply, call {PERSONA_TOOL} with the person's latest words, exactly as they said them. Wait for its note,
+then reply as the note says: it sets your role and your job for this reply only. Never mention the note, the tool, the
+role, the job or the stage."""
+SEARCH_RULES = """
+You can search Google. Search when the person asks about a fact that changes over time (news, versions, prices, dates)
+or one that you are not sure of, and say in a few words where the fact comes from."""
+
+
+def tool_rules(cfg: dict) -> str:
+    return (PERSONA_RULES if cfg.get("gemini_personas") else "") + (SEARCH_RULES if cfg.get("gemini_search") else "")
+
 
 def available() -> bool:
     """Whether a Gemini key is set. The value is never read out of this module."""
     return bool(os.environ.get(KEY, "").strip())
 
 
-def check(mode: str | None, model: str | None, voice: str | None) -> str | None:
+def check(mode: str | None, model: str | None, voice: str | None, personas: bool = False) -> str | None:
     """Why a session config cannot use these values, or None. Empty values mean the defaults."""
     if mode and mode not in MODES:
         return f"voice_mode must be one of {', '.join(MODES)}, not {mode!r}."
@@ -42,4 +56,6 @@ def check(mode: str | None, model: str | None, voice: str | None) -> str | None:
         return f"gemini_model must be one of {', '.join(MODELS)}, not {model!r}."
     if voice and voice not in VOICES:
         return f"gemini_voice {voice!r} is not a Gemini voice. Voices: {', '.join(VOICES)}."
+    if personas and (model or DEFAULT_MODEL).endswith("-extended-thinking"):
+        return f"The orb personas need {DEFAULT_MODEL}: the extended-thinking model refuses a tool that it must wait for."
     return None
