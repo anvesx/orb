@@ -1,6 +1,6 @@
 {
   "name": "orb",
-  "description": "Calls, Gemini turns, brain turns, transcripts and errors of orb (docs/design/observability.md).",
+  "description": "Calls, Gemini turns, brain turns, Gemini personas, transcripts and errors of orb (docs/design/observability.md).",
   "permissions": "PRIVATE",
   "pages": [
     {
@@ -52,6 +52,29 @@
          "query": "FROM Span SELECT count(*) WHERE service.name = 'orb-agent' AND span.kind = 'server' FACET name SINCE 1 day ago LIMIT 20"},
         {"title": "Route time (ms): p50, p95", "layout": {"column": 7, "row": 1, "width": 6, "height": 4}, "viz": "viz.table",
          "query": "FROM Span SELECT percentile(duration.ms, 50, 95), count(*) WHERE service.name = 'orb-agent' AND span.kind = 'server' FACET name SINCE 1 day ago LIMIT 20"}
+      ]
+    },
+    {
+      "name": "Gemini personas",
+      "widgets": [
+        {"title": "Turns that called the persona tool (%)", "layout": {"column": 1, "row": 1, "width": 3, "height": 3}, "viz": "viz.billboard",
+         "query": "FROM Log SELECT percentage(count(*), WHERE called IS TRUE) AS 'called' WHERE service.name = 'orb-voice' AND message = 'persona turn' SINCE 1 day ago"},
+        {"title": "Persona note time (s): p50, p90", "layout": {"column": 4, "row": 1, "width": 3, "height": 3}, "viz": "viz.billboard",
+         "query": "FROM Log SELECT percentile(note_s, 50, 90) WHERE service.name = 'orb-voice' AND message = 'persona turn' SINCE 1 day ago"},
+        {"title": "Replies that did the persona's job (%)", "layout": {"column": 7, "row": 1, "width": 3, "height": 3}, "viz": "viz.billboard",
+         "query": "FROM Log SELECT percentage(count(*), WHERE done IS TRUE) AS 'did the job' WHERE service.name = 'orb-voice' AND message = 'persona turn' AND done IS NOT NULL SINCE 1 day ago"},
+        {"title": "Tool words vs Gemini's transcript (1 = same)", "layout": {"column": 10, "row": 1, "width": 3, "height": 3}, "viz": "viz.billboard",
+         "query": "FROM Log SELECT average(match) AS 'match' WHERE service.name = 'orb-voice' AND message = 'persona turn' SINCE 1 day ago"},
+        {"title": "Turns by persona", "layout": {"column": 1, "row": 4, "width": 4, "height": 3}, "viz": "viz.pie",
+         "query": "FROM Log SELECT count(*) WHERE service.name = 'orb-voice' AND message = 'persona turn' FACET persona SINCE 1 day ago"},
+        {"title": "Persona's job done, by persona (%)", "layout": {"column": 5, "row": 4, "width": 4, "height": 3}, "viz": "viz.bar",
+         "query": "FROM Log SELECT percentage(count(*), WHERE done IS TRUE) WHERE service.name = 'orb-voice' AND message = 'persona turn' AND done IS NOT NULL FACET persona SINCE 1 day ago"},
+        {"title": "Called the tool, over time", "layout": {"column": 9, "row": 4, "width": 4, "height": 3}, "viz": "viz.line",
+         "query": "FROM Log SELECT filter(count(*), WHERE called IS TRUE) AS 'called', filter(count(*), WHERE called IS FALSE) AS 'skipped' WHERE service.name = 'orb-voice' AND message = 'persona turn' SINCE 1 day ago TIMESERIES AUTO"},
+        {"title": "Persona turns (words only with ORB_LOG_TEXT=1)", "layout": {"column": 1, "row": 7, "width": 12, "height": 5}, "viz": "viz.table",
+         "query": "FROM Log SELECT session, persona, debt, stage, called, note_s, match, done, interrupted, asked, heard WHERE service.name = 'orb-voice' AND message = 'persona turn' SINCE 1 day ago LIMIT 200"},
+        {"title": "Persona note failures and unrecorded replies", "layout": {"column": 1, "row": 12, "width": 12, "height": 3}, "viz": "viz.table",
+         "query": "FROM Log SELECT session, message, error WHERE service.name = 'orb-voice' AND message IN ('persona note failed: Gemini replies without one', 'Gemini reply not recorded') SINCE 1 day ago LIMIT 100"}
       ]
     }
   ]

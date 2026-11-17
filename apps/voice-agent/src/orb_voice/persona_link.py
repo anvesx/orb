@@ -114,7 +114,7 @@ class PersonaLink:
         try:
             check = (await self._post("replies", {"text": text, "interrupted": interrupted}))["check"]
         except Exception as e:
-            log.error("Gemini's reply was not recorded", extra={"session": self.sid, "error": f"{type(e).__name__}: {e}"})
+            log.error("Gemini reply not recorded", extra={"session": self.sid, "error": f"{type(e).__name__}: {e}"})
             check = {}
         self.bench.send("agent_check", debt=check.get("debt"), done=check.get("done"))
         log.info("persona turn", extra={"session": self.sid, "persona": d.get("persona"), "debt": d.get("debt"),
