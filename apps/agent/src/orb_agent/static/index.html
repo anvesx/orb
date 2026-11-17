@@ -216,6 +216,9 @@ audio { height: 32px; max-width: 260px; }
       <option value="orb">orb pipeline</option><option value="gemini-live">Gemini Live (cloud)</option></select></label>
     <label class="field gem" hidden><span class="eyebrow">Gemini model</span><select id="m-gmodel"></select></label>
     <label class="field gem" hidden><span class="eyebrow">Gemini voice</span><select id="m-gvoice"></select></label>
+    <label class="field gem" hidden title="orb personas: before each reply, Jev reads what you said and orb's rules choose the persona that Gemini speaks as">
+      <span class="eyebrow">Brain</span><select id="m-gbrain"><option value="gemini">Gemini alone</option><option value="orb">orb personas</option></select></label>
+    <label class="field gem" hidden><span class="eyebrow">Search</span><select id="m-gsearch"><option value="off">off</option><option value="on">Google Search</option></select></label>
     <label class="field orbf"><span class="eyebrow">Speech to text</span><select id="m-stt"></select></label>
     <label class="field orbf"><span class="eyebrow">LLM</span><select id="m-llm"></select></label>
     <label class="field orbf"><span class="eyebrow">Text to speech</span><select id="m-tts"></select></label>
@@ -397,7 +400,8 @@ document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => openT
 // --- models: the bar, and the models of this chat ---
 function isGemini() { return $("m-mode").value === "gemini-live"; }
 function modeConfig() {  // the voice mode; a Gemini session starts without warming the local LLM (gemini-live.md)
-  return isGemini() ? {voice_mode: "gemini-live", gemini_model: $("m-gmodel").value, gemini_voice: $("m-gvoice").value}
+  return isGemini() ? {voice_mode: "gemini-live", gemini_model: $("m-gmodel").value, gemini_voice: $("m-gvoice").value,
+                       gemini_personas: $("m-gbrain").value === "orb", gemini_search: $("m-gsearch").value === "on"}
                     : {voice_mode: "orb"};
 }
 function config() {  // a new chat or a bench test: only the fields that are set (empty = the service default)
@@ -431,7 +435,9 @@ function fillVoices() {
 }
 function cloudNote() {  // the STT engine of the bar, or Gemini Live, sends the audio of a call to another company
   const e = $("m-stt").value, cloud = !isGemini() && (engines?.stt?.cloud || []).includes(e);
-  const text = isGemini() ? "Gemini Live sends the audio of your call to Google, which bills for each minute. Jev, the personas and the debt board are off in this mode."
+  const brain = $("m-gbrain").value === "orb" ? " Before each reply, Jev reads what you said and orb's rules choose the persona that Gemini speaks as."
+                                              : " Jev, the personas and the debt board are off: choose Brain > orb personas to use them.";
+  const text = isGemini() ? "Gemini Live sends the audio of your call to Google, which bills for each minute." + brain
     : cloud ? `${e} is a cloud service: the audio of your call is sent to it, and it bills for each second of audio.` : "";
   $("cloud-note").hidden = !text; $("cloud-note").textContent = text;
 }
@@ -476,7 +482,7 @@ function showSessionModels() {
   if (!S) { $("c-session").hidden = true; return; }
   const c = S.config || {};
   if (c.voice_mode === "gemini-live") {
-    $("c-session").textContent = `this session: Gemini Live · ${c.gemini_model || gemInfo?.default_model || "default"} · voice ${c.gemini_voice || gemInfo?.default_voice || "default"}`;
+    $("c-session").textContent = `this session: Gemini Live · ${c.gemini_model || gemInfo?.default_model || "default"} · voice ${c.gemini_voice || gemInfo?.default_voice || "default"}${c.gemini_personas ? " · orb personas" : ""}${c.gemini_search ? " · Google Search" : ""}`;
     $("c-session").hidden = false; return;
   }
   const voice = c.tts_voice ? ` (${c.tts_voice.length > 20 ? c.tts_voice.slice(0, 20) + "…" : c.tts_voice})` : "";
@@ -486,7 +492,7 @@ function showSessionModels() {
 function note(text) { $("model-note").hidden = !text; $("note-text").textContent = text; }
 async function barChanged(e) {
   if (e?.target?.id === "m-tts") fillVoices();
-  if (e?.target?.id === "m-stt") cloudNote();
+  if (e?.target?.id === "m-stt" || e?.target?.id === "m-gbrain") cloudNote();
   if (e?.target?.id === "m-mode") showMode();
   if (!S) { note(""); return; }  // no session yet: the bar applies when you press Talk
   const llmDiffers = !isGemini() && $("m-llm").value && $("m-llm").value !== sessionLlm();  // Gemini uses no local LLM
@@ -497,7 +503,7 @@ async function barChanged(e) {
     else note(room ? "The new speech models apply when you press Talk again." : "");
   } catch (err) { note("The models did not change: " + err.message); }
 }
-["m-mode", "m-gmodel", "m-gvoice", "m-stt", "m-llm", "m-tts", "m-voice", "m-lang", "m-style"].forEach((id) => $(id).addEventListener("change", barChanged));
+["m-mode", "m-gmodel", "m-gvoice", "m-gbrain", "m-gsearch", "m-stt", "m-llm", "m-tts", "m-voice", "m-lang", "m-style"].forEach((id) => $(id).addEventListener("change", barChanged));
 
 // --- chat ---
 const LOCAL_HOSTS = ["127.0.0.1", "localhost", "[::1]", "::1"];
@@ -1045,7 +1051,7 @@ function onBench(e) {
   else if (e.type === "stt_error") { sttLoading = ""; updateOrb(); warn(e.error); }
   else if (e.type === "agent_state") $("agent").textContent = e.state;
   else if (e.type === "user_state") $("you").textContent = e.state;
-  else if (e.type === "session") $("callinfo").textContent = `stt ${e.stt} · llm ${e.llm} · tts ${e.tts} (${e.voice}) · vad ${e.vad} · turn ${e.turn}`;
+  else if (e.type === "session") $("callinfo").textContent = `stt ${e.stt} · llm ${e.llm} · tts ${e.tts} (${e.voice}) · vad ${e.vad} · turn ${e.turn}${e.personas ? " · orb personas" : ""}${e.search ? " · Google Search" : ""}`;
   event(`${e.type} ${JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => !["type", "t", "text"].includes(k))))}`);
 }
 async function talk() {

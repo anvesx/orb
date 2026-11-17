@@ -19,13 +19,19 @@ detects the turns on its server, thinks and speaks; its two transcripts become t
 service once for the instructions (`GET /v1/sessions/{id}/instructions`) and never calls the speech service, the
 agent's turns or Ollama, so none of their models load. The audio of the call goes to Google (a warning in the log).
 Errors reach the page once, in words (`gemini_live.explain`): key refused, quota, model not accepted, no network.
+With `gemini_personas` (decision 0018), `PersonaLink` (`persona_link.py`) gives Gemini the BLOCKING tool
+`get_persona_note`: it posts the words to `/notes` and returns the note, or a fallback note after 8 s or an error. Each
+reply that Gemini speaks goes to `/replies`, after the person's message; a turn with no tool call posts the words
+that Gemini heard first. One log line `persona turn` per reply: `called`, `persona`, `debt`, `stage`, `done`,
+`note_s`, `match` (the tool's words against Gemini's transcript), and the words only with `ORB_LOG_TEXT=1`. With
+`gemini_search`, the plugin's `GoogleSearch` tool.
 
 ## 1. Input
 | Input | From | Trust |
 |---|---|---|
 | A job for each new room | the LiveKit server (automatic dispatch, no agent name) | the dev server on 127.0.0.1 |
 | The person's audio, 48 kHz | the room | untrusted: noise, echo and any words |
-| The session config `{stt_engine, llm_model, tts_engine, tts_voice, tts_style, tts_lang, voice_mode, gemini_model, gemini_voice}` | `PUT /v1/sessions/{id}` of the agent service, at join | checked by the agent service |
+| The session config `{stt_engine, llm_model, tts_engine, tts_voice, tts_style, tts_lang, voice_mode, gemini_model, gemini_voice, gemini_personas, gemini_search}` | `PUT /v1/sessions/{id}` of the agent service, at join | checked by the agent service |
 | Settings (table in section 3) | the environment; the repo `.env` fills in only unset `ORB_*` and `LIVEKIT_*` keys and `GOOGLE_API_KEY` | the operator |
 
 The room name gives the session (`orb_core.rooms`, shared with the agent service): `orb-<id>` is the session `<id>`
@@ -83,6 +89,8 @@ The room name gives the session (`orb_core.rooms`, shared with the agent service
 | Endpointing min / max delay | 0.3 / 2.5 s | `ORB_MIN_ENDPOINTING_S`, `ORB_MAX_ENDPOINTING_S` | LiveKit defaults with the audio turn detector |
 | Interruption | 0.5 s and 2 words; resume after 2.0 s | `ORB_MIN_INTERRUPTION_S`, `_WORDS` | chosen: "Sure." is 1 word |
 | Gemini Live call | only `llm=` RealtimeModel (no STT/TTS/VAD); the session's instructions, or the voice rules when the agent service fails; one page error per call, retries quiet | `test_a_gemini_call_*`, `test_a_gemini_error_*` |
+| Gemini personas and search | BLOCKING with personas; both tools and both prompt rules with both switches; none without | `test_personas_*`, `test_a_call_with_both_switches_*`, `test_a_call_without_the_switches_is_unchanged` |
+| Persona link | note then reply, in order; a turn without a call is recorded; one read for two calls; the fallback on an error or after the timeout; no words in the log by default | `test_persona_link.py` |
 | Gemini options and lists | model, voice, both transcripts, sliding window, resumption; orb's lists match the plugin's | `test_options_*`, `test_orbs_gemini_lists_are_the_plugins` |
 | Gemini errors in words | key refused, quota, model, network, unknown; never the key | `test_errors_become_a_message_that_says_what_to_do` |
 | STT load at the start | one silent call with a 120 s timeout; a message, never an exception, when the engine did not load, was too slow or the service is down | `test_load_*` |

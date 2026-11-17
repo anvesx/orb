@@ -523,3 +523,9 @@ def test_the_gemini_switches_are_kept_and_the_personas_model_is_checked_as_a_who
     r = c.put(f"/v1/sessions/{sid}/config", json={"gemini_model": "gemini-3.8-live-extended-thinking"})
     assert r.status_code == 400 and "personas" in r.json()["error"]
     assert c.put(f"/v1/sessions/{sid}/config", json={"gemini_personas": False}).json()["gemini_personas"] is False
+
+
+def test_the_page_has_the_brain_and_search_switches_of_a_gemini_call(app_and_dir):
+    page = local(app_and_dir[0]).get("/").text
+    assert 'id="m-gbrain"' in page and 'id="m-gsearch"' in page
+    assert 'gemini_personas: $("m-gbrain").value === "orb"' in page and 'gemini_search: $("m-gsearch").value === "on"' in page

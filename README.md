@@ -16,7 +16,8 @@ in local voice. **On 2026-10-22** the voice worker moved to LiveKit Agents, and 
                        │                    speak ◀─ TTS ──┼── Kokoro · maya1 · indic-speak
                        │                                   │
                        │                    Gemini Live:   │  one Google model hears, thinks and speaks;
-                       │                                   │  orb gives it only the system prompt
+                       │                                   │  with "orb personas" it asks the brain before each
+                       │                                   │  reply (a tool); it can also search Google
                        ▼                                   ▼
  AGENT SERVICE   apps/agent (:8100) · one HTTP API: sessions · turns ─▶ NDJSON events
                  server.py: brain routes          voice.py: LiveKit tokens · Gemini Live settings

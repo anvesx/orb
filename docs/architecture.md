@@ -70,6 +70,14 @@ before any audio of the reply played, the two parts become one turn, and the age
 (`replace_last`). Interruptions are off for the first 3 s of agent speech in a call, while the browser's echo
 canceller adapts.
 
+## One Gemini Live turn with orb personas (decision 0018)
+```
+person speaks ─▶ Gemini Live hears it, then calls get_persona_note(text)      BLOCKING: it waits for the note
+   voice worker ─ POST /v1/sessions/{id}/notes ─▶ steps 1 and 2 above; the persona note is the tool's result
+Gemini speaks the reply as that persona (no Gemma) ─ POST /v1/sessions/{id}/replies ─▶ step 4 above
+```
+With "Google Search" on, Gemini can also search; Google runs the search, orb runs no search code.
+
 ## Where state lives
 | State | Where | Lifetime |
 |---|---|---|
