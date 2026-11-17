@@ -6,6 +6,7 @@ from typing import get_args
 import httpx
 import pytest
 from livekit.agents import llm
+from google.genai import types
 from livekit.plugins.google.realtime import api_proto
 
 from orb_core import gemini
@@ -179,8 +180,12 @@ def test_gemini_replies_are_logged_with_text_only_when_text_logging_is_on(monkey
         item = type("Item", (), {"role": "assistant", "text_content": "Namaste! Kya baat karein?", "interrupted": False,
                                  "metrics": {}})()
         caplog.clear()
-        with caplog.at_level("INFO", logger="orb.voice"):
+
+        async def fire():
             session.fire("conversation_item_added", type("Ev", (), {"item": item})())
+
+        with caplog.at_level("INFO", logger="orb.voice"):
+            asyncio.run(fire())
         rec = [r for r in caplog.records if r.getMessage() == "Gemini words"]
         assert len(rec) == 1 and rec[0].chars == 25 and (getattr(rec[0], "text", None) is not None) == has_text
 
@@ -196,11 +201,26 @@ def test_a_call_with_both_switches_has_both_tools_and_their_rules(monkeypatch):
                                                    "gemini_search": True})
     agent = session.started[1]
     assert {t.id for t in agent.tools} == {gemini.PERSONA_TOOL, "gemini_google_search"}
-    assert agent.instructions == "orb rules" + gemini.PERSONA_RULES + gemini.SEARCH_RULES
+    assert agent.instructions == gemini.PERSONA_RULES + "\n" + "orb rules" + gemini.SEARCH_RULES  # the persona rule first
     assert bench.sent[-1][1]["personas"] is True and bench.sent[-1][1]["search"] is True
 
 
-def test_a_call_without_the_switches_is_unchanged(monkeypatch):
+def test_a_call_without_the_switches_has_no_tools_and_the_same_prompt(monkeypatch):
     session, bench = gemini_call(monkeypatch)
     assert session.started[1].tools == [] and session.started[1].instructions == "orb rules"
-    assert "user_input_transcribed" in session.handlers and len(session.handlers["user_input_transcribed"]) == 1
+    assert session.kwargs["llm"].turns.personas is False  # each turn is still logged
+
+
+def test_the_model_tells_the_turn_log_of_searches_and_cancelled_tool_calls(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "fake-key-for-the-test")
+    seen = []
+    turns = type("T", (), {"searched": lambda self, g: seen.append(g.web_search_queries),
+                           "cancel": lambda self: seen.append("cancel")})()
+    model = gemini_live.make_model({}, turns)
+    assert type(model).session is not type(model).__mro__[1].session  # each call's session is the _Session below
+    sess = object.__new__(gemini_live._Session)  # a real one connects to Google
+    sess._realtime_model, sess._current_generation, sess._rejected_tool_calls = model, None, 0
+    sess._handle_server_content(types.LiveServerContent(grounding_metadata=types.GroundingMetadata(
+        web_search_queries=["new James Bond"])))
+    sess._handle_tool_call_cancellation(types.LiveServerToolCallCancellation(ids=["fc_1"]))
+    assert seen == [["new James Bond"], "cancel"]

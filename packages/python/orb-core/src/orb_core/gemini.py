@@ -30,17 +30,21 @@ When you did not hear the person clearly, ask them to say it again."""
 
 PERSONA_TOOL = "get_persona_note"
 # Added with the session switches (docs/design/gemini-personas.md).
-PERSONA_RULES = f"""
-Before every reply, call {PERSONA_TOOL} with the person's latest words, exactly as they said them. Wait for its note,
-then reply as the note says: it sets your role and your job for this reply only. Never mention the note, the tool, the
-role, the job or the stage."""
+PERSONA_RULES = f"""The first rule, above all others: before every reply, call {PERSONA_TOOL} with the person's latest
+words, exactly as they said them. No exception: also for a short question, a follow-up, a fact question, a complaint,
+a greeting, half a sentence, and a turn in which you search Google. Wait for its note, then reply as the note says: it
+sets your role and your job for this reply only. Never mention the note, the tool, the role, the job or the stage.
+"""
 SEARCH_RULES = """
 You can search Google. Search when the person asks about a fact that changes over time (news, versions, prices, dates)
 or one that you are not sure of, and say in a few words where the fact comes from."""
 
 
-def tool_rules(cfg: dict) -> str:
-    return (PERSONA_RULES if cfg.get("gemini_personas") else "") + (SEARCH_RULES if cfg.get("gemini_search") else "")
+def with_tool_rules(instructions: str, cfg: dict) -> str:
+    """The persona rule goes first, above the topic's prompt (with it last, Gemini called the tool on 16 of 31 turns,
+    2026-11-17)."""
+    return ((PERSONA_RULES + "\n" if cfg.get("gemini_personas") else "") + instructions
+            + (SEARCH_RULES if cfg.get("gemini_search") else ""))
 
 
 def available() -> bool:

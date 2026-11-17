@@ -75,3 +75,28 @@ def test_an_error_event_marks_the_turn(monkeypatch):
         run([Event("error", "The LLM failed: down")], provider)
         (turn,) = exporter.get_finished_spans()
         assert (turn.status.status_code, turn.status.description) == (StatusCode.ERROR, description)
+
+
+def test_each_log_line_goes_once_and_the_logger_provider_stays_private(monkeypatch):
+    import logging
+
+    from opentelemetry._logs import get_logger_provider
+    from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+
+    monkeypatch.setenv(telemetry.KEY, "test-key")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://127.0.0.1:9")  # nothing listens: no data leaves
+    monkeypatch.setattr(telemetry, "_providers", [])
+    root, orb = logging.getLogger(), logging.getLogger("orb")
+    before = (list(root.handlers), list(orb.handlers))
+    try:
+        assert telemetry.start("orb-test") is not None
+        assert not isinstance(get_logger_provider(), LoggerProvider)  # LiveKit cannot adopt it
+        (mine,) = [h for h in orb.handlers if isinstance(h, LoggingHandler)]
+        (others,) = [h for h in root.handlers if isinstance(h, LoggingHandler)]
+        record = lambda name: logging.LogRecord(name, logging.WARNING, "", 0, "x", None, None)
+        assert others.level == logging.WARNING
+        assert not others.filter(record("orb.voice")) and others.filter(record("livekit.agents"))
+    finally:
+        root.handlers[:], orb.handlers[:] = before
+        for p in telemetry._providers:
+            p.shutdown()

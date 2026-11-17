@@ -498,6 +498,8 @@ def test_another_writer_gets_notes_and_sends_its_replies(app_and_dir):
     messages = c.get(f"/v1/sessions/{sid}").json()["messages"]
     assert [(m["speaker"], m["channel"], m["interrupted"]) for m in messages] == [("human", "voice", False),
                                                                                 ("ai", "voice", True)]
+    r = c.post(f"/v1/sessions/{sid}/notes", json={"text": "Hashing is safer, I agree.", "replace_last": True})
+    assert r.status_code == 200  # it says nothing further, so nothing is replaced
     assert c.post(f"/v1/sessions/{sid}/notes", json={"text": "hi", "channel": "fax"}).status_code == 400
     assert c.post(f"/v1/sessions/{sid}/notes", json={"text": "   "}).status_code == 400
     assert c.post("/v1/sessions/nope-404/notes", json={"text": "hi"}).status_code == 404

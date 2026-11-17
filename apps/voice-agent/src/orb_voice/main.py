@@ -30,7 +30,7 @@ from orb_core import gemini, telemetry
 from orb_core.rooms import session_for
 from orb_voice import gemini_live
 from orb_voice.config import Settings, check_livekit, load_repo_env
-from orb_voice.persona_link import PersonaLink
+from orb_voice.gemini_turns import GeminiTurns
 from orb_voice.plugins import (FirstClauseTokenizer, LiveSTT, OrbLLM, OrbSTT, OrbTTS, TurnTracker, polish_text,
                                stt_engines_info)
 
@@ -287,24 +287,23 @@ async def gemini_call(ctx: JobContext, http: httpx.AsyncClient, s: Settings, sid
     except (httpx.HTTPError, KeyError, ValueError) as e:  # the call still works, with orb's rules only
         log.warning("Gemini Live: no session instructions, the voice rules only", extra={"session": sid, "error": str(e)})
         instructions = gemini.VOICE_RULES.strip()
-    instructions += gemini.tool_rules(cfg)
+    instructions = gemini.with_tool_rules(instructions, cfg)
+    turns = GeminiTurns(http, s.agent_url, sid, bench, s.log_text, personas=bool(cfg.get("gemini_personas")))
     try:
-        session = AgentSession(llm=gemini_live.make_model(cfg))
+        session = AgentSession(llm=gemini_live.make_model(cfg, turns))
     except Exception as e:  # no key in the worker's environment, or a plugin that refuses the options
         log.error("Gemini Live did not start", extra={"session": sid, "error": f"{type(e).__name__}: {e}"})
         bench.send("error", error=gemini_live.explain(e))
         return
     watch(session, bench, sid, s)
-    tools = gemini_live.provider_tools(cfg)
-    link = PersonaLink(http, s.agent_url, sid, bench, s.log_text) if cfg.get("gemini_personas") else None
-    if link:
-        tools.append(link.tool())
-        ctx.add_shutdown_callback(link.drain)
+    tools = gemini_live.provider_tools(cfg) + ([turns.tool()] if turns.personas else [])
+    ctx.add_shutdown_callback(turns.drain)
 
-        @session.on("user_input_transcribed")
-        def _heard(ev) -> None:
-            if ev.is_final:
-                link.hear(ev.transcript)
+    @session.on("user_input_transcribed")
+    def _heard(ev) -> None:
+        if ev.is_final:
+            turns.hear(ev.transcript)
+
     failed = {"sent": False}
 
     @session.on("conversation_item_added")
@@ -314,8 +313,7 @@ async def gemini_call(ctx: JobContext, http: httpx.AsyncClient, s: Settings, sid
             log.info("Gemini words", extra={"session": sid, "chars": len(item.text_content),
                                             "interrupted": getattr(item, "interrupted", False),
                                             **({"text": item.text_content} if s.log_text else {})})
-            if link:
-                link.replied(item.text_content, getattr(item, "interrupted", False))
+            turns.replied(item.text_content, getattr(item, "interrupted", False))
 
     @session.on("error")
     def _error(ev) -> None:
@@ -329,7 +327,7 @@ async def gemini_call(ctx: JobContext, http: httpx.AsyncClient, s: Settings, sid
 
     await session.start(room=ctx.room, agent=Agent(instructions=instructions, tools=tools))
     bench.send("session", session=sid, stt="gemini (in the model)", llm=opts["model"], tts="gemini",
-               voice=opts["voice"], vad="gemini server", turn="gemini server", personas=link is not None,
+               voice=opts["voice"], vad="gemini server", turn="gemini server", personas=turns.personas,
                search=bool(cfg.get("gemini_search")))
 
 

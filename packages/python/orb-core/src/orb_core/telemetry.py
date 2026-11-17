@@ -31,7 +31,6 @@ def start(service: str):
     if _providers:
         return _providers[0]
     from opentelemetry import metrics, trace
-    from opentelemetry._logs import set_logger_provider
     from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
     from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -54,8 +53,12 @@ def start(service: str):
     logs.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=f"{base}/v1/logs", headers=headers)))
     trace.set_tracer_provider(tracer)
     metrics.set_meter_provider(meter)
-    set_logger_provider(logs)
+    # the logger provider stays private: LiveKit Agents adopts a global one and adds its own root handler to it, which
+    # sent every orb line twice, and orb's lines to LiveKit Cloud
     logging.getLogger("orb").addHandler(LoggingHandler(logger_provider=logs))
+    others = LoggingHandler(level=logging.WARNING, logger_provider=logs)
+    others.addFilter(lambda r: r.name != "orb" and not r.name.startswith("orb."))
+    logging.getLogger().addHandler(others)
     _providers[:] = [tracer, meter, logs]
     return tracer
 

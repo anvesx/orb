@@ -21,7 +21,7 @@ Today it hosts one agent, `discussion`, with one instance for each LLM that a se
 | `GET /v1/sessions/{id}[?since=v]` | none | ID rule (orb-core) | the state, or `{"version": v, "unchanged": true}` |
 | `PUT /v1/sessions/{id}` | `{"topic", "agent"?}` | | the state; creates the session when it is missing |
 | `POST /v1/sessions/{id}/turns` | `{"text", "channel"?, "replace_last"?}` | text 1 to 8,000; channel web, voice, slack or test | NDJSON events |
-| `POST /v1/sessions/{id}/notes` | `{"text", "channel"?}` (channel default voice) | as turns; the session's agent must be a `ReplyWriter` (else 400) | `{"read", "decision"}`: Jev's read and the persona note for a model that writes the reply itself (Gemini Live, decision 0018); 502 when the reader fails; an `orb.turn` span |
+| `POST /v1/sessions/{id}/notes` | `{"text", "channel"?, "replace_last"?}` (channel default voice; `replace_last` as for turns) | as turns; the session's agent must be a `ReplyWriter` (else 400) | `{"read", "decision"}`: Jev's read and the persona note for a model that writes the reply itself (Gemini Live, decision 0018); 502 when the reader fails; an `orb.turn` span |
 | `POST /v1/sessions/{id}/replies` | `{"text", "channel"?, "interrupted"?}` | as notes | `{"check", "state"}`: the reply that model spoke is recorded and checked |
 | `POST /v1/voice/token` | `{"session_id"}` | the session must exist | `{"url", "room", "identity", "token"}` |
 | `GET /v1/voice/status` | none | | `{"url", "dev", "local", "proxy", "livekit", "worker"}`, or `null` when voice is off. `proxy`: the signal is forwarded (below). `livekit`, `worker`: whether the LiveKit server (its health page says OK) and the voice worker (a TCP connection) answer |

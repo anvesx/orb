@@ -291,3 +291,12 @@ def test_a_reader_failure_on_a_note_changes_nothing():
     (error,) = asyncio.run(collect(s.note("Hello there.")))
     assert error.type == "error" and "nothing changed" in error.data
     assert s.messages == [] and s.engine.ledger.messages == []
+
+
+def test_a_note_for_the_whole_sentence_replaces_the_note_for_its_start():
+    agent, s, llm = make([{"asks": 1}, {"claims": 1, "new_option": 1}], [])
+    asyncio.run(collect(s.note("Let's say I want to")))
+    _, decision = asyncio.run(collect(s.note("Let's say I want to automate my tickets.", replace_last=True)))
+    assert [m["text"] for m in s.messages] == ["Let's say I want to automate my tickets."]
+    assert len(s.engine.ledger.messages) == 1 and s.turns[-1]["replaced"] == "Let's say I want to"
+    assert decision.data["persona"] == "Rival"

@@ -204,13 +204,14 @@ class DiscussionSession:
             yield Event("state", self.state())
 
     # --- a reply that another model writes (Gemini Live) ---
-    async def note(self, text: str, channel: str = "voice"):
+    async def note(self, text: str, channel: str = "voice", replace_last: bool = False):
         text = check_text(text)
         await self.settle()
         async with self._lock:
             await self.prepare(warm=False)
+            replaced = self._undo_last(text) if replace_last else None
             try:
-                turn = await self._read(text, channel)
+                turn = await self._read(text, channel, replaced)
             except Exception as e:
                 yield Event("error", f"The reader failed on the message, so nothing changed. ({type(e).__name__}: {e})")
                 return

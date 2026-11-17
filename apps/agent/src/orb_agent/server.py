@@ -8,7 +8,7 @@ GET  /v1/sessions/{id}[?since=v]                            -> the state, or {"v
 PUT  /v1/sessions/{id}            {"topic", "agent"?}       -> the state; creates the session when it is missing
 POST /v1/sessions/{id}/turns      {"text", "channel"?, "replace_last"?}
                                   -> NDJSON events: read, decision, token..., reply, check, state
-POST /v1/sessions/{id}/notes      {"text", "channel"?}      -> {"read", "decision"}: the persona note for another writer
+POST /v1/sessions/{id}/notes      {"text", "channel"?, "replace_last"?} -> {"read", "decision"}: a note for another writer
 POST /v1/sessions/{id}/replies    {"text", "channel"?, "interrupted"?} -> {"check", "state"}: what that writer said
 GET  /v1/sessions/{id}/instructions                         -> {"instructions"}: the system prompt for Gemini Live
 GET  /v1/models                                             -> {"llm": {...}, "gemini": {available, models, voices, ...}}
@@ -73,9 +73,12 @@ class TurnIn(BaseModel):
 class NoteIn(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
     channel: str = "voice"
+    replace_last: bool = False
 
 
-class ReplyIn(NoteIn):
+class ReplyIn(BaseModel):
+    text: str = Field(min_length=1, max_length=8000)
+    channel: str = "voice"
     interrupted: bool = False
 
 
@@ -258,7 +261,8 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
     @app.post("/v1/sessions/{sid}/notes")
     async def note(sid: str, body: NoteIn):
         s = writer_or_400(sid, body.channel)
-        return await answer(s, telemetry.traced(s.note(body.text, body.channel), sid, body.channel, body.text))
+        events = s.note(body.text, body.channel, replace_last=body.replace_last)
+        return await answer(s, telemetry.traced(events, sid, body.channel, body.text))
 
     @app.post("/v1/sessions/{sid}/replies")
     async def reply(sid: str, body: ReplyIn):
