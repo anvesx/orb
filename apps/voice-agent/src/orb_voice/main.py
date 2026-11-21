@@ -135,13 +135,20 @@ async def entry(ctx: JobContext) -> None:
     room = ctx.job.room.name
     sid = session_for(room)
     t0 = time.perf_counter()
+    telemetry.keep_local()
     http = httpx.AsyncClient(limits=httpx.Limits(max_keepalive_connections=8))
-    ctx.add_shutdown_callback(http.aclose)
-    ctx.add_shutdown_callback(lambda: asyncio.to_thread(telemetry.flush))
+    drains: list = []  # posts still on their way at hang-up, such as the last Gemini turn
+
+    async def close() -> None:  # in order: LiveKit runs all shutdown callbacks at once
+        await asyncio.gather(*(d() for d in drains))
+        await http.aclose()
+        await asyncio.to_thread(telemetry.flush)
+
+    ctx.add_shutdown_callback(close)
     cfg = await ensure_session(http, s.agent_url, sid)
     bench = Bench(ctx.room)
     if cfg.get("voice_mode") == "gemini-live":
-        await gemini_call(ctx, http, s, sid, cfg, bench)
+        await gemini_call(ctx, http, s, sid, cfg, bench, drains)
         return
     stt_engine = cfg.get("stt_engine") or s.stt_engine
     cloud_engines, default_stt = await stt_engines_info(http, s.speech_url)
@@ -277,7 +284,8 @@ def watch(session: AgentSession, bench: Bench, sid: str, s: Settings) -> dict:
     return last_reply
 
 
-async def gemini_call(ctx: JobContext, http: httpx.AsyncClient, s: Settings, sid: str, cfg: dict, bench: Bench) -> None:
+async def gemini_call(ctx: JobContext, http: httpx.AsyncClient, s: Settings, sid: str, cfg: dict, bench: Bench,
+                      drains: list) -> None:
     """A Gemini Live call (docs/design/gemini-live.md): one Google model hears, thinks and speaks. The speech service,
     the orb agent's turns and Ollama are not used, so none of their models load."""
     opts = gemini_live.options(cfg)
@@ -297,7 +305,7 @@ async def gemini_call(ctx: JobContext, http: httpx.AsyncClient, s: Settings, sid
         return
     watch(session, bench, sid, s)
     tools = gemini_live.provider_tools(cfg) + ([turns.tool()] if turns.personas else [])
-    ctx.add_shutdown_callback(turns.drain)
+    drains.append(turns.drain)
 
     @session.on("user_input_transcribed")
     def _heard(ev) -> None:

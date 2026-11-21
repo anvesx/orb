@@ -52,6 +52,7 @@ class GeminiTurns:
         self.note_error: str | None = None
         self.queries: list[str] = []
         self.cancelled = False
+        self.cancels = 0
         self._note: asyncio.Task | None = None
 
     def tool(self):
@@ -76,6 +77,7 @@ class GeminiTurns:
 
     def cancel(self) -> None:
         self.cancelled = True
+        self.cancels += 1
 
     async def note(self, text: str) -> str:
         t0 = time.perf_counter()
@@ -102,7 +104,7 @@ class GeminiTurns:
             note = self._then(self._post_note, heard, note is not None)
         turn = {"turn": self.turn, "personas": self.personas, "called": self.calls > 0, "calls": self.calls,
                 "note_s": self.note_s, "note_error": self.note_error, "match": match(self.asked, heard),
-                "searched": bool(self.queries), "searches": len(self.queries), "cancelled": self.cancelled,
+                "searched": bool(self.queries), "searches": len(self.queries), "cancelled": self.cancels > 0,
                 "interrupted": interrupted, "reply_chars": len(text),
                 **({"asked": self.asked, "heard": heard, "queries": " | ".join(self.queries), "reply": text}
                    if self.log_text else {})}
@@ -140,8 +142,13 @@ class GeminiTurns:
         if self.personas:
             try:
                 d = await note if note is not None else {}
-            except Exception:
-                pass
+            except Exception as e:
+                if not turn["note_error"]:  # a turn without a call: the read of the words Gemini heard failed
+                    turn["note_error"] = f"{type(e).__name__}: {e}"[:300]
+                    log.error("persona note failed: the turn is recorded without one",
+                              extra={"session": self.sid, "error": turn["note_error"]})
+            if turn["note_error"]:
+                d = {}  # Gemini replied with the fallback, not with this persona
             try:
                 check = (await self._post("replies", {"text": text, "interrupted": interrupted}))["check"]
             except Exception as e:

@@ -228,7 +228,8 @@ class DiscussionSession:
             turn["ai"] = self.messages[-1]["seq"]
             self._pending = asyncio.create_task(self._read_reply(turn, text))
             self.version += 1
-        yield Event("check", await asyncio.shield(self._pending))
+            check = await asyncio.shield(self._pending)
+        yield Event("check", check)
         yield Event("state", self.state())
 
     async def _read(self, text: str, channel: str, replaced: str | None = None) -> dict:

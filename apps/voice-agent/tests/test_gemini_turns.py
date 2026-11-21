@@ -126,6 +126,18 @@ def test_after_a_cancelled_call_the_words_gemini_heard_replace_the_part(caplog):
     assert logged(caplog)[0].cancelled is True
 
 
+def test_a_cancelled_call_that_gemini_makes_again_is_logged_as_cancelled(caplog):
+    transport, posts = service()
+
+    async def cancelled(turns):
+        turns.cancel()
+
+    with caplog.at_level("INFO", logger="orb.voice"):
+        call(transport, [note("Let's say I want to"), cancelled, note("Let's say I want to automate my tickets."), say()])
+    assert [(p[0], p[1].get("replace_last")) for p in posts] == [("notes", False), ("notes", True), ("replies", None)]
+    assert logged(caplog)[0].cancelled is True
+
+
 def test_searches_are_counted_per_turn_and_the_queries_logged_only_with_text(caplog):
     transport, _ = service()
 
@@ -156,11 +168,24 @@ def test_a_failed_note_gives_gemini_the_fallback_and_the_reply_is_still_recorded
     assert turn.persona is None and "HTTP 502" in turn.note_error
 
 
-def test_a_slow_brain_gives_the_fallback_in_time(monkeypatch):
+def test_a_failed_read_on_a_turn_without_a_call_is_logged(caplog):
+    transport, posts = service(notes_status=502)
+    with caplog.at_level("INFO", logger="orb.voice"):
+        call(transport, [say(heard="Why?")])
+    assert [p[0] for p in posts] == ["notes", "replies"]
+    (turn,) = logged(caplog)
+    assert turn.called is False and "HTTP 502" in turn.note_error
+    assert any(r.levelname == "ERROR" and r.getMessage().startswith("persona note failed") for r in caplog.records)
+
+
+def test_a_slow_brain_gives_the_fallback_in_time_and_the_late_persona_is_not_logged(monkeypatch, caplog):
     monkeypatch.setattr(gemini_turns, "NOTE_TIMEOUT", 0.05)
     transport, _ = service(delay=0.3)
-    (got,), _ = call(transport, [ask])
+    with caplog.at_level("INFO", logger="orb.voice"):
+        (got, _), _ = call(transport, [ask, say()])
     assert got == FALLBACK
+    (turn,) = logged(caplog)
+    assert "TimeoutError" in turn.note_error and turn.persona is None and turn.done is True
 
 
 @pytest.mark.parametrize("a, b, ratio", [("Store it in Redis.", "store it in redis", 1.0), ("", "x", None),

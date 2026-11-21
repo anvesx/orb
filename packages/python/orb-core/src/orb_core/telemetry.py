@@ -68,6 +68,19 @@ def flush() -> None:
         p.force_flush(timeout_millis=5000)
 
 
+CLOUD = ("opentelemetry.", "livekit.agents.telemetry.")
+
+
+def keep_local(name: str = "orb") -> None:
+    """orb's lines go to the console and to New Relic only, not to the LiveKit Cloud handlers on the root logger (an
+    OpenTelemetry one, and a buffer that it replays), which would also get the words of ORB_LOG_TEXT=1. Call it once
+    logging is set up."""
+    lg, root = logging.getLogger(name), logging.getLogger()
+    if lg.propagate:
+        lg.handlers += [h for h in root.handlers if not any(c.__module__.startswith(CLOUD) for c in type(h).__mro__)]
+        lg.propagate = False
+
+
 async def traced(events: AsyncIterator[Event], sid: str, channel: str, text: str,
                  provider=None) -> AsyncIterator[Event]:
     """Passes the events of one turn on unchanged and records them as an `orb.turn` span, with `jev.read`, `llm` and

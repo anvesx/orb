@@ -100,3 +100,26 @@ def test_each_log_line_goes_once_and_the_logger_provider_stays_private(monkeypat
         root.handlers[:], orb.handlers[:] = before
         for p in telemetry._providers:
             p.shutdown()
+
+
+def test_orb_lines_skip_the_otel_handlers_on_the_root_logger_and_keep_the_console():
+    import logging
+
+    from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+
+    class Cloud(LoggingHandler):  # as LiveKit's handler for LiveKit Cloud
+        pass
+
+    class Buffer(logging.Handler):  # as LiveKit's buffer of the lines before the call, replayed to LiveKit Cloud
+        __module__ = "livekit.agents.telemetry.traces"
+
+    root, orb = logging.getLogger(), logging.getLogger("orb")
+    console, cloud = logging.StreamHandler(), Cloud(logger_provider=LoggerProvider())
+    before = (list(root.handlers), list(orb.handlers), orb.propagate)
+    try:
+        root.handlers[:] = [console, cloud, Buffer()]
+        telemetry.keep_local()
+        telemetry.keep_local()
+        assert orb.handlers == before[1] + [console] and orb.propagate is False
+    finally:
+        root.handlers[:], orb.handlers[:], orb.propagate = before

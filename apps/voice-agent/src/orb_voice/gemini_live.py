@@ -66,10 +66,10 @@ class _Session(realtime_api.RealtimeSession):
             self._realtime_model.turns.searched(server_content.grounding_metadata)
         super()._handle_server_content(server_content)
 
-    def _handle_tool_call_cancellation(self, cancellation: types.LiveServerToolCallCancellation) -> None:
+    def _handle_tool_call_cancellation(self, tool_call_cancellation: types.LiveServerToolCallCancellation) -> None:
         if self._realtime_model.turns:
             self._realtime_model.turns.cancel()
-        super()._handle_tool_call_cancellation(cancellation)
+        super()._handle_tool_call_cancellation(tool_call_cancellation)
 
 
 class Model(google.realtime.RealtimeModel):

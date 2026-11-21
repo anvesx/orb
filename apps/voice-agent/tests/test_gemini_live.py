@@ -101,14 +101,11 @@ class FakeBench:
 class Ctx:
     room = object()
 
-    def add_shutdown_callback(self, fn):
-        pass
-
 
 def gemini_call(monkeypatch, instructions_status=200, cfg=None):
     monkeypatch.setenv("GOOGLE_API_KEY", "fake-key-for-the-test")
     monkeypatch.setattr(main, "AgentSession", FakeSession)
-    FakeSession.made = []
+    FakeSession.made, FakeSession.drains = [], []
 
     def handler(req):
         return httpx.Response(instructions_status, json={"instructions": "orb rules"})
@@ -118,7 +115,8 @@ def gemini_call(monkeypatch, instructions_status=200, cfg=None):
     async def go():
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
             s = main.Settings.from_env()
-            await main.gemini_call(Ctx(), http, s, "web-1", cfg or {"voice_mode": "gemini-live", "gemini_voice": "Kore"}, bench)
+            await main.gemini_call(Ctx(), http, s, "web-1", cfg or {"voice_mode": "gemini-live", "gemini_voice": "Kore"}, bench,
+                                   FakeSession.drains)
 
     asyncio.run(go())
     return FakeSession.made[0], bench
@@ -141,7 +139,7 @@ def test_a_worker_without_the_key_tells_the_page_and_does_not_crash(monkeypatch)
     async def go():
         async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"instructions": "x"}))) as http:
             monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-            await main.gemini_call(Ctx(), http, main.Settings.from_env(), "web-1", {"voice_mode": "gemini-live"}, bench)
+            await main.gemini_call(Ctx(), http, main.Settings.from_env(), "web-1", {"voice_mode": "gemini-live"}, bench, [])
 
     asyncio.run(go())
     assert FakeSession.made == [] and bench.sent == [("error", {"error": bench.sent[0][1]["error"]})]
@@ -203,6 +201,7 @@ def test_a_call_with_both_switches_has_both_tools_and_their_rules(monkeypatch):
     assert {t.id for t in agent.tools} == {gemini.PERSONA_TOOL, "gemini_google_search"}
     assert agent.instructions == gemini.PERSONA_RULES + "\n" + "orb rules" + gemini.SEARCH_RULES  # the persona rule first
     assert bench.sent[-1][1]["personas"] is True and bench.sent[-1][1]["search"] is True
+    assert FakeSession.drains == [session.kwargs["llm"].turns.drain]  # the last turn is sent before the client closes
 
 
 def test_a_call_without_the_switches_has_no_tools_and_the_same_prompt(monkeypatch):
@@ -224,3 +223,16 @@ def test_the_model_tells_the_turn_log_of_searches_and_cancelled_tool_calls(monke
         web_search_queries=["new James Bond"])))
     sess._handle_tool_call_cancellation(types.LiveServerToolCallCancellation(ids=["fc_1"]))
     assert seen == [["new James Bond"], "cancel"]
+
+
+def test_the_plugin_still_has_the_private_methods_that_the_model_overrides(monkeypatch):
+    import inspect
+
+    from livekit.plugins.google.realtime import realtime_api
+
+    params = lambda cls, name: list(inspect.signature(getattr(cls, name)).parameters.values())
+    for name in ("_handle_server_content", "_handle_tool_call_cancellation"):
+        assert params(realtime_api.RealtimeSession, name) == params(gemini_live._Session, name)
+    assert params(realtime_api.RealtimeModel, "session") == params(gemini_live.Model, "session")
+    monkeypatch.setenv("GOOGLE_API_KEY", "fake-key-for-the-test")
+    assert isinstance(gemini_live.make_model({})._sessions, realtime_api.weakref.WeakSet)
