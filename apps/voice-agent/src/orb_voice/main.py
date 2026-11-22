@@ -30,6 +30,7 @@ from orb_core import gemini, telemetry
 from orb_core.rooms import session_for
 from orb_voice import gemini_live
 from orb_voice.config import Settings, check_livekit, load_repo_env
+from orb_voice.gemini_turns import GeminiTurns
 from orb_voice.plugins import (FirstClauseTokenizer, LiveSTT, OrbLLM, OrbSTT, OrbTTS, TurnTracker, polish_text,
                                stt_engines_info)
 
@@ -134,13 +135,20 @@ async def entry(ctx: JobContext) -> None:
     room = ctx.job.room.name
     sid = session_for(room)
     t0 = time.perf_counter()
+    telemetry.keep_local()
     http = httpx.AsyncClient(limits=httpx.Limits(max_keepalive_connections=8))
-    ctx.add_shutdown_callback(http.aclose)
-    ctx.add_shutdown_callback(lambda: asyncio.to_thread(telemetry.flush))
+    drains: list = []  # posts still on their way at hang-up, such as the last Gemini turn
+
+    async def close() -> None:  # in order: LiveKit runs all shutdown callbacks at once
+        await asyncio.gather(*(d() for d in drains))
+        await http.aclose()
+        await asyncio.to_thread(telemetry.flush)
+
+    ctx.add_shutdown_callback(close)
     cfg = await ensure_session(http, s.agent_url, sid)
     bench = Bench(ctx.room)
     if cfg.get("voice_mode") == "gemini-live":
-        await gemini_call(ctx, http, s, sid, cfg, bench)
+        await gemini_call(ctx, http, s, sid, cfg, bench, drains)
         return
     stt_engine = cfg.get("stt_engine") or s.stt_engine
     cloud_engines, default_stt = await stt_engines_info(http, s.speech_url)
@@ -276,7 +284,8 @@ def watch(session: AgentSession, bench: Bench, sid: str, s: Settings) -> dict:
     return last_reply
 
 
-async def gemini_call(ctx: JobContext, http: httpx.AsyncClient, s: Settings, sid: str, cfg: dict, bench: Bench) -> None:
+async def gemini_call(ctx: JobContext, http: httpx.AsyncClient, s: Settings, sid: str, cfg: dict, bench: Bench,
+                      drains: list) -> None:
     """A Gemini Live call (docs/design/gemini-live.md): one Google model hears, thinks and speaks. The speech service,
     the orb agent's turns and Ollama are not used, so none of their models load."""
     opts = gemini_live.options(cfg)
@@ -286,13 +295,23 @@ async def gemini_call(ctx: JobContext, http: httpx.AsyncClient, s: Settings, sid
     except (httpx.HTTPError, KeyError, ValueError) as e:  # the call still works, with orb's rules only
         log.warning("Gemini Live: no session instructions, the voice rules only", extra={"session": sid, "error": str(e)})
         instructions = gemini.VOICE_RULES.strip()
+    instructions = gemini.with_tool_rules(instructions, cfg)
+    turns = GeminiTurns(http, s.agent_url, sid, bench, s.log_text, personas=bool(cfg.get("gemini_personas")))
     try:
-        session = AgentSession(llm=gemini_live.make_model(cfg))
+        session = AgentSession(llm=gemini_live.make_model(cfg, turns))
     except Exception as e:  # no key in the worker's environment, or a plugin that refuses the options
         log.error("Gemini Live did not start", extra={"session": sid, "error": f"{type(e).__name__}: {e}"})
         bench.send("error", error=gemini_live.explain(e))
         return
     watch(session, bench, sid, s)
+    tools = gemini_live.provider_tools(cfg) + ([turns.tool()] if turns.personas else [])
+    drains.append(turns.drain)
+
+    @session.on("user_input_transcribed")
+    def _heard(ev) -> None:
+        if ev.is_final:
+            turns.hear(ev.transcript)
+
     failed = {"sent": False}
 
     @session.on("conversation_item_added")
@@ -302,6 +321,7 @@ async def gemini_call(ctx: JobContext, http: httpx.AsyncClient, s: Settings, sid
             log.info("Gemini words", extra={"session": sid, "chars": len(item.text_content),
                                             "interrupted": getattr(item, "interrupted", False),
                                             **({"text": item.text_content} if s.log_text else {})})
+            turns.replied(item.text_content, getattr(item, "interrupted", False))
 
     @session.on("error")
     def _error(ev) -> None:
@@ -313,9 +333,10 @@ async def gemini_call(ctx: JobContext, http: httpx.AsyncClient, s: Settings, sid
         failed["sent"] = True
         bench.send("error", error=gemini_live.explain(err))
 
-    await session.start(room=ctx.room, agent=Agent(instructions=instructions))
+    await session.start(room=ctx.room, agent=Agent(instructions=instructions, tools=tools))
     bench.send("session", session=sid, stt="gemini (in the model)", llm=opts["model"], tts="gemini",
-               voice=opts["voice"], vad="gemini server", turn="gemini server")
+               voice=opts["voice"], vad="gemini server", turn="gemini server", personas=turns.personas,
+               search=bool(cfg.get("gemini_search")))
 
 
 def main() -> None:

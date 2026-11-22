@@ -10,10 +10,10 @@ reader, a streaming Ollama client, the agent interface with its session store, a
 | `config.py` | settings from the environment, with `.env` files as a fallback |
 | `jev.py` | the TypeSafe client for Jev, and the cost of a call |
 | `ollama.py` | streaming chat with a local LLM |
-| `agent.py` | `Agent`, `Session`, `Event`, input checks, `SessionStore` |
+| `agent.py` | `Agent`, `Session`, `ReplyWriter` (a session whose replies another model writes), `Event`, input checks, `SessionStore` |
 | `web.py` | the readable text of a web page, with a guard against private addresses |
 | `rooms.py` | the room-to-session rule that the agent service and the voice worker share (`orb-<session id>`) |
-| `gemini.py` | the Gemini Live models, voices and spoken-turn rules that both apps share |
+| `gemini.py` | the Gemini Live models, voices, spoken-turn rules, and the persona tool's name and rules, that both apps share |
 | `telemetry.py` | OpenTelemetry to New Relic when `NEW_RELIC_LICENSE_KEY` is set; the `orb.turn` span of a turn |
 
 ## 1. Input

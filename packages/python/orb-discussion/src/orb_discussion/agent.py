@@ -13,6 +13,8 @@ disagree. A voice channel can then send the whole sentence again with replace_la
 unanswered turn and reads the whole sentence as one message.
 
 The agent works the same for every channel. Only the reply length changes for voice.
+Another model can write and speak the replies instead (Gemini Live): `note` gives it steps 1 and 2, and `add_reply`
+runs step 4 on what it said.
 """
 from __future__ import annotations
 
@@ -142,12 +144,8 @@ class DiscussionSession:
             await self.prepare()
             replaced = self._undo_last(text) if replace_last else None
             wait = time.perf_counter() - t_enter  # the read of the last reply, a turn before this one, the source
-            read = asyncio.create_task(self._read_person(text, channel, replaced))
-            self._pending = read
             try:
-                turn = await asyncio.shield(read)  # a cancel here leaves the read running, so it is still recorded
-            except asyncio.CancelledError:
-                raise
+                turn = await self._read(text, channel, replaced)
             except Exception as e:  # the ledger is unchanged, so the person can send the message again
                 yield Event("error", f"The reader failed on your message, so nothing changed. "
                                      f"Send it again. ({type(e).__name__}: {e})")
@@ -204,6 +202,40 @@ class DiscussionSession:
             if turn.get("ai") is not None:
                 yield Event("check", await asyncio.shield(self._pending))
             yield Event("state", self.state())
+
+    # --- a reply that another model writes (Gemini Live) ---
+    async def note(self, text: str, channel: str = "voice", replace_last: bool = False):
+        text = check_text(text)
+        await self.settle()
+        async with self._lock:
+            await self.prepare(warm=False)
+            replaced = self._undo_last(text) if replace_last else None
+            try:
+                turn = await self._read(text, channel, replaced)
+            except Exception as e:
+                yield Event("error", f"The reader failed on the message, so nothing changed. ({type(e).__name__}: {e})")
+                return
+        yield Event("read", turn["read"])
+        yield Event("decision", turn["decision"])
+
+    async def add_reply(self, text: str, channel: str = "voice", interrupted: bool = False):
+        text = check_text(text)
+        await self.settle()
+        async with self._lock:
+            last = self.turns[-1] if self.turns else None
+            turn = last if last is not None and "ai" not in last else {"timing": {}}
+            self._add("ai", text, channel, interrupted=interrupted)
+            turn["ai"] = self.messages[-1]["seq"]
+            self._pending = asyncio.create_task(self._read_reply(turn, text))
+            self.version += 1
+            check = await asyncio.shield(self._pending)
+        yield Event("check", check)
+        yield Event("state", self.state())
+
+    async def _read(self, text: str, channel: str, replaced: str | None = None) -> dict:
+        read = asyncio.create_task(self._read_person(text, channel, replaced))
+        self._pending = read
+        return await asyncio.shield(read)  # a cancel here leaves the read running, so it is still recorded
 
     async def _read_person(self, text: str, channel: str, replaced: str | None) -> dict:
         """Jev reads the message, the rules choose the need, and the turn is recorded: all or nothing."""

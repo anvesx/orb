@@ -119,7 +119,7 @@ class VoiceChannel:
 
     def check(self, config) -> None:
         """400 for a Gemini value that is not known, or a Gemini mode without key."""
-        why = gemini.check(config.voice_mode, config.gemini_model, config.gemini_voice)
+        why = gemini.check(config.voice_mode, config.gemini_model, config.gemini_voice, bool(config.gemini_personas))
         if why:
             raise HTTPException(400, why)
         if self.gemini_only and config.voice_mode != "gemini-live" and (config.voice_mode or config.stt_engine or config.tts_engine):

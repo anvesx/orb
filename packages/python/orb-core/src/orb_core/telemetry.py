@@ -31,7 +31,6 @@ def start(service: str):
     if _providers:
         return _providers[0]
     from opentelemetry import metrics, trace
-    from opentelemetry._logs import set_logger_provider
     from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
     from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
@@ -54,8 +53,12 @@ def start(service: str):
     logs.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=f"{base}/v1/logs", headers=headers)))
     trace.set_tracer_provider(tracer)
     metrics.set_meter_provider(meter)
-    set_logger_provider(logs)
+    # the logger provider stays private: LiveKit Agents adopts a global one and adds its own root handler to it, which
+    # sent every orb line twice, and orb's lines to LiveKit Cloud
     logging.getLogger("orb").addHandler(LoggingHandler(logger_provider=logs))
+    others = LoggingHandler(level=logging.WARNING, logger_provider=logs)
+    others.addFilter(lambda r: r.name != "orb" and not r.name.startswith("orb."))
+    logging.getLogger().addHandler(others)
     _providers[:] = [tracer, meter, logs]
     return tracer
 
@@ -63,6 +66,19 @@ def start(service: str):
 def flush() -> None:
     for p in _providers:
         p.force_flush(timeout_millis=5000)
+
+
+CLOUD = ("opentelemetry.", "livekit.agents.telemetry.")
+
+
+def keep_local(name: str = "orb") -> None:
+    """orb's lines go to the console and to New Relic only, not to the LiveKit Cloud handlers on the root logger (an
+    OpenTelemetry one, and a buffer that it replays), which would also get the words of ORB_LOG_TEXT=1. Call it once
+    logging is set up."""
+    lg, root = logging.getLogger(name), logging.getLogger()
+    if lg.propagate:
+        lg.handlers += [h for h in root.handlers if not any(c.__module__.startswith(CLOUD) for c in type(h).__mro__)]
+        lg.propagate = False
 
 
 async def traced(events: AsyncIterator[Event], sid: str, channel: str, text: str,

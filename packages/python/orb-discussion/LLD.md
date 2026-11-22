@@ -43,6 +43,10 @@ One turn of `DiscussionSession.turn(text, channel, replace_last)`:
    background: one Jev request, the rules apply it, and the check says whether the reply paid the need.
 7. Emit `reply`, `check` and `state`.
 
+When another model writes the replies (Gemini Live, decision 0018), `note(text)` runs steps 1, 3 and 4 with
+`prepare(warm=False)`, so no LLM loads, and `add_reply(text, interrupted)` runs step 6 on what that model said and emits
+`check` and `state`. A reply with no person turn before it is still recorded and read, in order.
+
 **What Jev reads** (`questions.earlier_in_view`): the topic, the options on the table, the open debts as
 sentences, at most 12 earlier messages (the opening message, the last 4, and the messages that started an open
 debt), and the new message.
@@ -120,6 +124,7 @@ reason?" after an Examiner need.
 | A reply of 3,000 characters | cut near 700 and marked cut off on the voice channel; whole on the web channel | `test_a_long_voice_reply_is_cut_at_the_character_limit_but_a_web_reply_is_not` |
 | Markdown and "[" | removed; the stream stops at "[" | `test_filter_stops_at_a_bracket_and_strips_markdown` |
 | A leaked reply in a full turn | the person hears only the real reply; the chat history is clean | `test_agent.py::test_a_copied_note_never_reaches_the_person` |
+| Another model writes the reply | the note names the persona, no LLM is called or warmed, the reply is checked; a reply with no note is still recorded; a reader failure changes nothing | `test_agent.py::test_another_writer_*`, `test_a_reply_without_a_note_*`, `test_a_reader_failure_on_a_note_*` |
 
 ## 5. Security
 - **Message text leaves the machine.** Each Jev request carries the new message and up to 12 earlier ones to

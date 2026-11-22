@@ -21,6 +21,8 @@ Today it hosts one agent, `discussion`, with one instance for each LLM that a se
 | `GET /v1/sessions/{id}[?since=v]` | none | ID rule (orb-core) | the state, or `{"version": v, "unchanged": true}` |
 | `PUT /v1/sessions/{id}` | `{"topic", "agent"?}` | | the state; creates the session when it is missing |
 | `POST /v1/sessions/{id}/turns` | `{"text", "channel"?, "replace_last"?}` | text 1 to 8,000; channel web, voice, slack or test | NDJSON events |
+| `POST /v1/sessions/{id}/notes` | `{"text", "channel"?, "replace_last"?}` (channel default voice; `replace_last` as for turns) | as turns; the session's agent must be a `ReplyWriter` (else 400) | `{"read", "decision"}`: Jev's read and the persona note for a model that writes the reply itself (Gemini Live, decision 0018); 502 when the reader fails; an `orb.turn` span |
+| `POST /v1/sessions/{id}/replies` | `{"text", "channel"?, "interrupted"?}` | as notes | `{"check", "state"}`: the reply that model spoke is recorded and checked |
 | `POST /v1/voice/token` | `{"session_id"}` | the session must exist | `{"url", "room", "identity", "token"}` |
 | `GET /v1/voice/status` | none | | `{"url", "dev", "local", "proxy", "livekit", "worker"}`, or `null` when voice is off. `proxy`: the signal is forwarded (below). `livekit`, `worker`: whether the LiveKit server (its health page says OK) and the voice worker (a TCP connection) answer |
 | `WS /rtc`, `WS /rtc/v1` (any query) | the frames of the LiveKit client | only when the LiveKit server is on this computer; behind the gate | the frames of the LiveKit server (the voice signal), forwarded. The handshake is refused (and `validate` says why) when the server does not answer |
@@ -39,7 +41,8 @@ Today it hosts one agent, `discussion`, with one instance for each LLM that a se
 The session config: `stt_engine`, `llm_model`, `tts_engine`, `tts_voice` (≤ 400 characters: a maya1 voice is a
 description), `tts_style` and `tts_lang`. The service checks `llm_model` against Ollama's installed models. The
 speech service checks the rest when the voice worker uses them. Gemini Live (docs/design/gemini-live.md):
-`voice_mode` (`orb` or `gemini-live`), `gemini_model` and `gemini_voice`, checked against `orb_core.gemini`; a
+`voice_mode` (`orb` or `gemini-live`), `gemini_model`, `gemini_voice`, and the switches `gemini_personas` and
+`gemini_search` (decision 0018; the personas need `gemini-3.8-live`), checked against `orb_core.gemini`; a
 `gemini-live` config without `GOOGLE_API_KEY` gets 400 with what to do. A session that starts in `gemini-live` loads its
 source but never warms the LLM (gemma4:e2b is 7.9 GB, and the call does not use it). With `ORB_GEMINI_ONLY=1`
 (`scripts/dev.sh --gemini`) a voice config that asks for the orb pipeline gets 400, no session warms the LLM, and

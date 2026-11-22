@@ -12,6 +12,7 @@ import logging
 import httpx
 from google.genai import types
 from livekit.plugins import google
+from livekit.plugins.google.realtime import realtime_api
 
 from orb_core import gemini
 
@@ -37,6 +38,8 @@ def options(cfg: dict) -> dict:
     extra = {}
     if model.endswith("-extended-thinking"):  # it refuses a session without a level (1007); the plain model refuses one
         extra["thinking_config"] = types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW)
+    if cfg.get("gemini_personas"):  # Gemini waits for the persona note before it speaks
+        extra["tool_behavior"] = types.Behavior.BLOCKING
     return {
         **extra,
         "model": model,
@@ -54,10 +57,40 @@ def options(cfg: dict) -> dict:
     }
 
 
-def make_model(cfg: dict) -> google.realtime.RealtimeModel:
+class _Session(realtime_api.RealtimeSession):
+    """The plugin's session, plus two server messages that the plugin only logs or drops: Google Search's queries and
+    the cancel of a tool call."""
+
+    def _handle_server_content(self, server_content: types.LiveServerContent) -> None:
+        if server_content.grounding_metadata and self._realtime_model.turns:
+            self._realtime_model.turns.searched(server_content.grounding_metadata)
+        super()._handle_server_content(server_content)
+
+    def _handle_tool_call_cancellation(self, tool_call_cancellation: types.LiveServerToolCallCancellation) -> None:
+        if self._realtime_model.turns:
+            self._realtime_model.turns.cancel()
+        super()._handle_tool_call_cancellation(tool_call_cancellation)
+
+
+class Model(google.realtime.RealtimeModel):
+    def __init__(self, turns=None, **opts):
+        super().__init__(**opts)
+        self.turns = turns
+
+    def session(self, *, turn_detection_disabled: bool = False) -> realtime_api.RealtimeSession:
+        sess = _Session(self)
+        self._sessions.add(sess)
+        return sess
+
+
+def make_model(cfg: dict, turns=None) -> Model:
     """The model of a Gemini Live call. It reads GOOGLE_API_KEY from the environment; nothing connects until the
-    session starts."""
-    return google.realtime.RealtimeModel(**options(cfg))
+    session starts. `turns` (GeminiTurns) hears of each search and each cancelled tool call."""
+    return Model(turns, **options(cfg))
+
+
+def provider_tools(cfg: dict) -> list:
+    return [google.tools.GoogleSearch()] if cfg.get("gemini_search") else []
 
 
 def explain(error: object) -> str:

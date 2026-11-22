@@ -424,6 +424,8 @@ def test_a_gemini_session_never_warms_the_llm_and_an_orb_session_does(tmp_path):
     ({"voice_mode": "telepathy"}, "voice_mode must be one of"),
     ({"voice_mode": "gemini-live", "gemini_model": "gemini-1.0-pro"}, "gemini_model must be one of"),
     ({"voice_mode": "gemini-live", "gemini_voice": "Siri"}, "is not a Gemini voice"),
+    ({"voice_mode": "gemini-live", "gemini_model": "gemini-3.8-live-extended-thinking", "gemini_personas": True},
+     "The orb personas need gemini-3.8-live"),
 ])
 def test_unknown_gemini_values_are_refused(tmp_path, cfg, why):
     c, _ = gemini_app(tmp_path)
@@ -482,3 +484,50 @@ def test_gemini_only_refuses_an_orb_voice_session_and_never_warms(tmp_path):
     assert c.put(f"/v1/sessions/{sid}/config", json={"voice_mode": "gemini-live"}).status_code == 200
     c.get("/v1/sessions")
     assert llm.warmed == 0
+
+
+def test_another_writer_gets_notes_and_sends_its_replies(app_and_dir):
+    app, folder = app_and_dir
+    c = local(app)
+    sid = c.post("/v1/sessions", json={"topic": "Should our assistant store passwords?"}).json()["id"]
+    r = c.post(f"/v1/sessions/{sid}/notes", json={"text": "We should store passwords in a JSON file."})
+    assert r.status_code == 200 and set(r.json()) == {"read", "decision"}
+    assert r.json()["decision"]["persona"] == "Rival"
+    r = c.post(f"/v1/sessions/{sid}/replies", json={"text": "Hashing is safer.", "interrupted": True})
+    assert r.status_code == 200 and set(r.json()) == {"check", "state"} and r.json()["check"]["done"] is True
+    messages = c.get(f"/v1/sessions/{sid}").json()["messages"]
+    assert [(m["speaker"], m["channel"], m["interrupted"]) for m in messages] == [("human", "voice", False),
+                                                                                ("ai", "voice", True)]
+    r = c.post(f"/v1/sessions/{sid}/notes", json={"text": "Hashing is safer, I agree.", "replace_last": True})
+    assert r.status_code == 200  # it says nothing further, so nothing is replaced
+    assert c.post(f"/v1/sessions/{sid}/notes", json={"text": "hi", "channel": "fax"}).status_code == 400
+    assert c.post(f"/v1/sessions/{sid}/notes", json={"text": "   "}).status_code == 400
+    assert c.post("/v1/sessions/nope-404/notes", json={"text": "hi"}).status_code == 404
+
+
+def test_a_reader_failure_on_a_note_is_a_502(tmp_path):
+    class Down:
+        def system_one(self, state, questions):
+            raise RuntimeError("Jev is down")
+
+    agent = DiscussionAgent(Down(), FakeLLM(), load_source=lambda url: {})
+    c = local(create_app(SessionStore({"discussion": agent}, save_dir=tmp_path)))
+    sid = c.post("/v1/sessions", json={"topic": "T"}).json()["id"]
+    r = c.post(f"/v1/sessions/{sid}/notes", json={"text": "hello"})
+    assert r.status_code == 502 and "Jev is down" in r.json()["error"]
+
+
+def test_the_gemini_switches_are_kept_and_the_personas_model_is_checked_as_a_whole(tmp_path):
+    c, _ = gemini_app(tmp_path)
+    cfg = {"voice_mode": "gemini-live", "gemini_personas": True, "gemini_search": True}
+    sid = c.post("/v1/sessions", json={"topic": "T", "config": cfg}).json()["id"]
+    assert c.get(f"/v1/sessions/{sid}").json()["config"] == cfg
+    r = c.put(f"/v1/sessions/{sid}/config", json={"gemini_model": "gemini-3.8-live-extended-thinking"})
+    assert r.status_code == 400 and "personas" in r.json()["error"]
+    assert c.put(f"/v1/sessions/{sid}/config", json={"gemini_personas": False}).json()["gemini_personas"] is False
+
+
+def test_the_page_has_the_brain_and_search_switches_of_a_gemini_call(app_and_dir):
+    page = local(app_and_dir[0]).get("/").text
+    assert 'id="m-gbrain"' in page and 'id="m-gsearch"' in page
+    assert 'gemini_personas: $("m-gbrain").value === "orb"' in page and 'gemini_search: $("m-gsearch").value === "on"' in page

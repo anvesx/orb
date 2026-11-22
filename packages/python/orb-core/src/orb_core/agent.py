@@ -69,6 +69,19 @@ class Session(Protocol):
 
 
 @runtime_checkable
+class ReplyWriter(Protocol):
+    """A session whose replies another model writes and speaks (Gemini Live): the agent reads and decides, the other
+    model replies, and its reply comes back so the agent keeps every message in order."""
+
+    def note(self, text: str, channel: str = "voice", replace_last: bool = False) -> AsyncIterator[Event]:
+        """Read one user message and yield `read` and `decision` (with the note for the writer), or `error`.
+        replace_last=True: as in `Session.turn`, `text` says the last message further."""
+
+    def add_reply(self, text: str, channel: str = "voice", interrupted: bool = False) -> AsyncIterator[Event]:
+        """Record the reply that the writer spoke, and yield `check` and `state`."""
+
+
+@runtime_checkable
 class Agent(Protocol):
     name: str
 
