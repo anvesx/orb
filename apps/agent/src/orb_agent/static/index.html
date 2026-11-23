@@ -220,7 +220,6 @@ audio { height: 32px; max-width: 260px; }
       <span class="eyebrow">Brain</span><select id="m-gbrain"><option value="gemini">Gemini alone</option><option value="orb">orb personas</option></select></label>
     <label class="field gem" hidden><span class="eyebrow">Search</span><select id="m-gsearch"><option value="off">off</option><option value="on">Google Search</option></select></label>
     <label class="field orbf"><span class="eyebrow">Speech to text</span><select id="m-stt"></select></label>
-    <label class="field orbf"><span class="eyebrow">LLM</span><select id="m-llm"></select></label>
     <label class="field orbf"><span class="eyebrow">Text to speech</span><select id="m-tts"></select></label>
     <label class="field orbf"><span class="eyebrow">Voice</span><input type="text" id="m-voice" list="voices" placeholder="default"><datalist id="voices"></datalist></label>
     <label class="field orbf"><span class="eyebrow">Language</span><input type="text" id="m-lang" list="langs" placeholder="default"><datalist id="langs"></datalist></label>
@@ -233,7 +232,6 @@ audio { height: 32px; max-width: 260px; }
     <button data-tab="chat" class="on">Talk</button>
     <button data-tab="stt">STT</button>
     <button data-tab="tts">TTS</button>
-    <button data-tab="llm">LLM</button>
     <button data-tab="suites">Suites</button>
   </nav>
 
@@ -323,20 +321,6 @@ audio { height: 32px; max-width: 260px; }
         <tbody id="tts-rows"></tbody></table></div></div>
     </div></div>
 
-    <!-- LLM -->
-    <div class="panel tool" id="tab-llm" hidden><div class="inner">
-      <div class="card">
-        <label class="field"><span class="eyebrow">A voice turn for the LLM in the bar above (its own test session per model)</span>
-          <input type="text" id="llm-text" value="We should store user passwords in a plain JSON file so the assistant can log in for them."></label>
-        <div class="row"><button class="btn primary" id="ask" type="button">Send</button><button class="btn" id="llm-new" type="button">New session</button>
-          <span class="muted mono" id="llm-status"></span></div>
-        <div class="reply" id="llm-reply"></div>
-      </div>
-      <div class="card"><div class="tablewrap"><table>
-        <thead><tr><th>Model</th><th>Persona</th><th class="num">Jev read</th><th class="num">LLM first token</th><th class="num">LLM total</th><th>Checks</th></tr></thead>
-        <tbody id="llm-rows"></tbody></table></div></div>
-    </div></div>
-
     <!-- Suites -->
     <div class="panel tool" id="tab-suites" hidden><div class="inner">
       <div class="card">
@@ -345,8 +329,6 @@ audio { height: 32px; max-width: 260px; }
           <button class="btn primary" data-suite="stt" type="button">STT suite</button>
           <label class="field"><span class="eyebrow">Clips per group</span><input type="number" id="suite-limit" min="1" placeholder="all" style="width: 110px"></label>
           <button class="btn primary" data-suite="tts" type="button">TTS suite</button>
-          <button class="btn primary" data-suite="llm" type="button">LLM suite</button>
-          <label class="field" style="flex: 1 1 220px"><span class="eyebrow">LLMs (comma list; empty: the bar's LLM)</span><input type="text" id="suite-models"></label>
           <button class="btn primary" data-suite="turn" type="button">Turn suite</button>
         </div>
         <div class="small">STT compares the engines checked in the STT tab. The turn suite plays speech into a real room for about 4 minutes.</div>
@@ -354,7 +336,7 @@ audio { height: 32px; max-width: 260px; }
       </div>
       <div class="card">
         <div class="row">
-          <label class="field"><span class="eyebrow">Suite</span><select id="res-suite"><option>stt</option><option>tts</option><option>llm</option><option>turn</option></select></label>
+          <label class="field"><span class="eyebrow">Suite</span><select id="res-suite"><option>stt</option><option>tts</option><option>turn</option></select></label>
           <label class="field" style="flex: 1 1 200px"><span class="eyebrow">Run</span><select id="res-run"></select></label>
         </div>
         <div class="tablewrap" id="results"><span class="muted">No run chosen.</span></div>
@@ -372,7 +354,7 @@ const PROMISES = ["Interaction", "Divergence", "Challenge", "Reflection", "Progr
 const WORDS = {Interaction: "Reply to the other side", Divergence: "More than one option", Challenge: "A reason for each claim",
                Reflection: "Change only for a reason", Progression: "No repeats, no stuck points", Resolution: "Close the points"};
 let S = null, room = null, poll = null;
-let engines = null, llmInfo = null, gemInfo = null;  // gemInfo: the Gemini Live options (/v1/models)
+let engines = null, gemInfo = null;  // gemInfo: the Gemini Live options (/v1/models)
 
 async function api(path, opts = {}) {
   const r = await fetch(path, {headers: {"content-type": "application/json"}, ...opts});
@@ -405,7 +387,7 @@ function modeConfig() {  // the voice mode; a Gemini session starts without warm
                     : {voice_mode: "orb"};
 }
 function config() {  // a new chat or a bench test: only the fields that are set (empty = the service default)
-  const c = {stt_engine: $("m-stt").value, llm_model: $("m-llm").value, tts_engine: $("m-tts").value,
+  const c = {stt_engine: $("m-stt").value, tts_engine: $("m-tts").value,
              tts_voice: $("m-voice").value.trim(), tts_lang: $("m-lang").value.trim(), tts_style: $("m-style").value.trim(),
              ...modeConfig()};
   return Object.fromEntries(Object.entries(c).filter(([, v]) => v));
@@ -444,9 +426,7 @@ function cloudNote() {  // the STT engine of the bar, or Gemini Live, sends the 
 async function loadModels() {
   try {  // first, and on its own: a Gemini Live call needs neither the speech service nor Ollama
     const m = await api("/v1/models");
-    llmInfo = m.llm; gemInfo = m.gemini || null;
-    $("m-llm").innerHTML = (llmInfo.installed.length ? llmInfo.installed : [llmInfo.default]).map((x) =>
-      `<option ${x === llmInfo.default ? "selected" : ""}>${esc(x)}</option>`).join("");
+    gemInfo = m.gemini || null;
     const g = gemInfo || {models: [], voices: [], available: false};
     $("m-gmodel").innerHTML = g.models.map((x) => `<option ${x === g.default_model ? "selected" : ""}>${esc(x)}</option>`).join("");
     $("m-gvoice").innerHTML = g.voices.map((x) => `<option ${x === g.default_voice ? "selected" : ""}>${esc(x)}</option>`).join("");
@@ -476,7 +456,6 @@ async function loadModels() {
     if (!isGemini()) note("The speech service is not reachable: " + e.message + ". Gemini Live works without it.");
   }
 }
-function sessionLlm() { return S?.config?.llm_model || llmInfo?.default || ""; }
 function showSessionModels() {
   capLabels();
   if (!S) { $("c-session").hidden = true; return; }
@@ -486,7 +465,7 @@ function showSessionModels() {
     $("c-session").hidden = false; return;
   }
   const voice = c.tts_voice ? ` (${c.tts_voice.length > 20 ? c.tts_voice.slice(0, 20) + "…" : c.tts_voice})` : "";
-  $("c-session").textContent = `this session: stt ${c.stt_engine || engines?.stt?.model || "default"} · llm ${sessionLlm()} · tts ${c.tts_engine || engines?.tts?.model || "default"}${voice}`;
+  $("c-session").textContent = `this session: stt ${c.stt_engine || engines?.stt?.model || "default"} · tts ${c.tts_engine || engines?.tts?.model || "default"}${voice}`;
   $("c-session").hidden = false;
 }
 function note(text) { $("model-note").hidden = !text; $("note-text").textContent = text; }
@@ -495,15 +474,13 @@ async function barChanged(e) {
   if (e?.target?.id === "m-stt" || e?.target?.id === "m-gbrain") cloudNote();
   if (e?.target?.id === "m-mode") showMode();
   if (!S) { note(""); return; }  // no session yet: the bar applies when you press Talk
-  const llmDiffers = !isGemini() && $("m-llm").value && $("m-llm").value !== sessionLlm();  // Gemini uses no local LLM
   try {
     S.config = await api(`/v1/sessions/${encodeURIComponent(S.id)}/config`, {method: "PUT", body: JSON.stringify(voiceConfig())});
     showSessionModels();
-    if (llmDiffers) note(`This session uses the LLM ${sessionLlm()}. Press New session to use ${$("m-llm").value}.`);
-    else note(room ? "The new speech models apply when you press Talk again." : "");
+    note(room ? "The new speech models apply when you press Talk again." : "");
   } catch (err) { note("The models did not change: " + err.message); }
 }
-["m-mode", "m-gmodel", "m-gvoice", "m-gbrain", "m-gsearch", "m-stt", "m-llm", "m-tts", "m-voice", "m-lang", "m-style"].forEach((id) => $(id).addEventListener("change", barChanged));
+["m-mode", "m-gmodel", "m-gvoice", "m-gbrain", "m-gsearch", "m-stt", "m-tts", "m-voice", "m-lang", "m-style"].forEach((id) => $(id).addEventListener("change", barChanged));
 
 // --- chat ---
 const LOCAL_HOSTS = ["127.0.0.1", "localhost", "[::1]", "::1"];
@@ -537,8 +514,8 @@ async function health() {
   try {
     const h = await api("/health");
     const llm = h.agents?.discussion?.llm;
-    $("c-llm").textContent = llm?.ok ? "LLM service ok" : "LLM not ready";
-    $("c-llm").className = "chip " + (llm?.ok ? "ok" : "bad");
+    $("c-llm").textContent = !llm ? "No LLM: Gemini Live only" : llm.ok ? "LLM service ok" : "LLM not ready";
+    $("c-llm").className = "chip " + (!llm ? "" : llm.ok ? "ok" : "bad");
     const block = showVoice(h.voice);
     warn(block ? block.text : "");
     $("talk").disabled = !!block?.hard;
@@ -1051,7 +1028,7 @@ function onBench(e) {
   else if (e.type === "stt_error") { sttLoading = ""; updateOrb(); warn(e.error); }
   else if (e.type === "agent_state") $("agent").textContent = e.state;
   else if (e.type === "user_state") $("you").textContent = e.state;
-  else if (e.type === "session") $("callinfo").textContent = `stt ${e.stt} · llm ${e.llm} · tts ${e.tts} (${e.voice}) · vad ${e.vad} · turn ${e.turn}${e.personas ? " · orb personas" : ""}${e.search ? " · Google Search" : ""}`;
+  else if (e.type === "session") $("callinfo").textContent = `stt ${e.stt} · tts ${e.tts} (${e.voice}) · vad ${e.vad} · turn ${e.turn}${e.personas ? " · orb personas" : ""}${e.search ? " · Google Search" : ""}`;
   event(`${e.type} ${JSON.stringify(Object.fromEntries(Object.entries(e).filter(([k]) => !["type", "t", "text"].includes(k))))}`);
 }
 async function talk() {
@@ -1232,51 +1209,11 @@ $("speak").onclick = async () => {
   $("speak").disabled = false;
 };
 
-// --- LLM tab: a voice turn, streamed, in a test session per model ---
-let llmSession = {model: null, id: null};
-const LEAK = /\b(persona|need|debt|stage|why|note)\s*:|\[|NOTE_END/i;
-$("llm-new").onclick = () => { llmSession = {model: null, id: null}; $("llm-status").textContent = "a new session starts with the next turn"; };
-$("ask").onclick = async () => {
-  const model = $("m-llm").value;
-  $("ask").disabled = true; $("llm-reply").textContent = ""; $("llm-status").textContent = "…";
-  try {
-    if (llmSession.model !== model) {
-      const s = await api("/v1/sessions", {method: "POST", body: JSON.stringify({topic: "Bench LLM", config: {llm_model: model}})});
-      llmSession = {model, id: s.id};
-    }
-    const t0 = performance.now();
-    const r = await fetch(`/v1/sessions/${llmSession.id}/turns`, {method: "POST", headers: {"content-type": "application/json"},
-                                                                 body: JSON.stringify({text: $("llm-text").value, channel: "voice"})});
-    if (!r.ok) throw new Error((await r.json()).error);
-    const reader = r.body.getReader(), dec = new TextDecoder();
-    let buf = "", reply = "", persona = "", timing = {}, first = null;
-    for (;;) {
-      const {value, done} = await reader.read(); if (done) break;
-      buf += dec.decode(value, {stream: true});
-      let i; while ((i = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (!line) continue;
-        const e = JSON.parse(line);
-        if (e.type === "token") { first ??= (performance.now() - t0) / 1000; reply += e.data; $("llm-reply").textContent = reply; }
-        else if (e.type === "decision") persona = e.data.persona;
-        else if (e.type === "reply") timing = e.data.timing || {};
-        else if (e.type === "error") throw new Error(e.data);
-      }
-    }
-    const sentences = (reply.match(/[.!?](\s|$)/g) || []).length || (reply.trim() ? 1 : 0);
-    const checks = [reply.trim() ? "reply" : "NO REPLY", sentences <= 3 && reply.length <= 400 ? "short" : "TOO LONG", LEAK.test(reply) ? "LEAK" : "no leak"];
-    $("llm-rows").insertAdjacentHTML("afterbegin", `<tr><td>${esc(model)}</td><td>${esc(persona)}</td><td class="num">${sec(timing.read_human)}</td>
-      <td class="num">${sec(timing.llm_first_token)}</td><td class="num">${sec(timing.llm_total)}</td><td>${checks.map((c) => `<span class="${/[A-Z]{2}/.test(c) ? "bad" : "good"}">${c}</span>`).join(" · ")}</td></tr>`);
-    $("llm-status").textContent = `session ${llmSession.id}`;
-  } catch (e) { $("llm-status").textContent = "error: " + e.message; }
-  $("ask").disabled = false;
-};
-
 // --- Suites tab ---
 let pollJob = null;
 document.querySelectorAll("[data-suite]").forEach((b) => b.onclick = async () => {
   const suite = b.dataset.suite, body = {suite};
   if (suite === "stt") { body.engines = sttEngines(); const n = +$("suite-limit").value; if (n) body.limit = n; }
-  if (suite === "llm") { const m = $("suite-models").value.split(",").map((x) => x.trim()).filter(Boolean); body.models = m.length ? m : [$("m-llm").value]; }
   try {
     const job = await api("/v1/bench/runs", {method: "POST", body: JSON.stringify(body)});
     $("suite-progress").textContent = `${suite} suite started…`;
@@ -1309,13 +1246,6 @@ async function showRun() {
         `<tr><td>${esc(s.engine)}</td><td>${esc(s.voice)}</td><td>${esc(s.text_id)}</td><td class="num">${sec(s.first_audio_s)} s</td>
         <td class="num">${sec(s.rtf)}</td><td class="num">${sec(s.audio_s, 1)} s</td><td class="num">${pct(s.wer)}</td>
         <td><audio controls preload="none" src="/v1/bench/audio/${esc(s.wav)}"></audio></td></tr>`));
-  } else if (suite === "llm") {
-    $("results").innerHTML = r.summary.map((s) => `<div class="mono">${esc(s.model)}: ${s.passed} of ${s.cases} cases pass ·
-      ${s.silent ?? 0} silent · first word p50 ${sec(s.first_token_p50)} s · slowest ${sec(s.first_token_max)} s</div>`).join("") +
-      table([["Model"], ["Case"], ["Persona"], ["First token", "num"], ["Checks"], ["Reply"]],
-        r.rows.map((s) => `<tr><td>${esc(s.model)}</td><td>${esc(s.case)}</td><td>${esc(s.persona || "")}</td><td class="num">${sec(s.first_token_s)}</td>
-          <td>${Object.entries(s.checks || {}).map(([k, v]) => `<span class="${v ? "good" : "bad"}">${esc(k)}</span>`).join(" · ")}${s.error ? ` <span class="bad">${esc(s.error)}</span>` : ""}</td>
-          <td>${esc((s.reply || "").slice(0, 160))}</td></tr>`));
   } else {
     const s = r.summary || {};
     $("results").innerHTML = `<div class="mono">first agent audio p50 ${sec(s.first_audio_p50)} s · p90 ${sec(s.first_audio_p90)} s ·
@@ -1331,7 +1261,7 @@ health();
 loadClips();
 loadModels().then(() => {
   const tab = new URLSearchParams(location.search).get("tab");
-  if (["stt", "tts", "llm", "suites"].includes(tab)) openTab(tab);
+  if (["stt", "tts", "suites"].includes(tab)) openTab(tab);
 });
 clearView(); updateOrb(); orbStart();
 </script>

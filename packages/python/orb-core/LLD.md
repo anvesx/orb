@@ -9,8 +9,7 @@ reader, a streaming Ollama client, the agent interface with its session store, a
 |---|---|
 | `config.py` | settings from the environment, with `.env` files as a fallback |
 | `jev.py` | the TypeSafe client for Jev, and the cost of a call |
-| `ollama.py` | streaming chat with a local LLM |
-| `agent.py` | `Agent`, `Session`, `ReplyWriter` (a session whose replies another model writes), `Event`, input checks, `SessionStore` |
+| `agent.py` | `Agent`, `Session`, `ReplyWriter` (a session whose replies another model writes), `Event`, input checks, `LLMError`, `SessionStore` |
 | `web.py` | the readable text of a web page, with a guard against private addresses |
 | `rooms.py` | the room-to-session rule that the agent service and the voice worker share (`orb-<session id>`) |
 | `gemini.py` | the Gemini Live models, voices, spoken-turn rules, and the persona tool's name and rules, that both apps share |
@@ -41,8 +40,6 @@ reader, a streaming Ollama client, the agent interface with its session store, a
 |---|---|---|
 | Jev price | $0.042 per million input tokens; cost = tokens / 10⁶ × 0.042 | the price that the old chat app used (2026-10-12); not checked again against TypeSafe's current price list |
 | Jev retries | 6, back-off 1 s to 30 s | chosen: a turn must survive a short API outage |
-| Ollama defaults | temperature 0.7, context 16,384 tokens, keep-alive 30 min, `think: false` | chosen; the persona sets the temperature per reply |
-| Ollama timing log | one line per reply: load, prompt tokens and seconds, reply tokens and seconds; never words | Ollama's last stream message; measured 2026-10-22: a new turn's prompt reads in 0.21 to 0.52 s on gemma4:e2b |
 | Live sessions | at most 200, least recently used evicted | chosen |
 | Page limits | 6,000,000 bytes read; 40,000 characters kept (about 10k tokens); 20 s timeout; 5 redirects | chosen: a long blog post fits Gemma's context with the chat |
 | Text block kept | headings always; other blocks of 30 or more characters | chosen: drops menu items and buttons |

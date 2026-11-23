@@ -11,9 +11,9 @@ help:
 	@echo "make setup    install system libraries, the conda env and the speech models (once)"
 	@echo "make test     every test (no network, no API cost)"
 	@echo "make dev      start every service; then open http://127.0.0.1:8100"
-	@echo "make dev-text start only the text chat (agent service and Ollama)"
-	@echo "make e2e      the end-to-end voice test (needs 'make dev' in another terminal)"
-	@echo "make check    start the whole stack, test it, and stop it (about 4 minutes; --quick: 1 minute)"
+	@echo "make dev-text start only the agent service and Ollama (no voice)"
+	@echo "make e2e      the end-to-end voice test (needs 'make dev' in another terminal and an LLM for replies)"
+	@echo "make check    start the whole stack, test it, and stop it (about 2 minutes; --quick: 1 minute)"
 	@echo "make bench    build the git-ignored test audio, then open http://127.0.0.1:8100/bench"
 	@echo "make replay CHAT=data/chats/<id>.json   replay a saved chat with live Jev calls (costs about \$$0.001)"
 
@@ -21,7 +21,7 @@ setup: brew env models
 
 brew:
 	HOMEBREW_NO_AUTO_UPDATE=1 brew install livekit ollama ffmpeg
-	ollama pull gemma4:e2b
+	ollama pull qwen2.5:1.5b
 
 env:
 	@if [ -x "$(PY)" ]; then echo "the orb env exists"; else $(CONDA) env create -f environment.yml; fi

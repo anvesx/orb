@@ -1,1 +1,1 @@
-"""The scored suites: stt, tts and llm call the running services over HTTP; turn plays audio into a LiveKit room."""
+"""The scored suites: stt and tts call the running services over HTTP; turn plays audio into a LiveKit room."""

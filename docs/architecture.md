@@ -34,15 +34,17 @@ later Slack) carry turns to it.**
  COMPONENTS         orb-core: config · Jev reader · Ollama client · agent interface · page loader
                     orb-speech: Whistle, Parakeet or Cartesia (cloud) STT · Kokoro, maya1 or indic-speak TTS (:8200)
                     voice worker (apps/voice-agent): LiveKit Agents · Silero · turn detector · plugins
-                    orb-bench: test audio · STT, TTS, LLM and turn suites · tabs of the one page (/)
+                    orb-bench: test audio · STT, TTS and turn suites · tabs of the one page (/)
 ```
 
 ## One text turn
+Since decision 0019 orb has no LLM for replies: step 3 answers with an `error` event until one is added. The
+numbers are of Gemma (`gemma4:e2b`), measured 2026-10-21.
 ```
 browser ── POST /v1/sessions/{id}/turns {"text"} ──▶ agent service
    1. Jev reads the message: one request, about 11 yes/no questions          0.49 s median
    2. the debt rules choose the need and the persona                         < 1 ms
-   3. Gemma writes the reply with the persona note, token by token           first word 0.34 s, all 0.95 s
+   3. the LLM writes the reply with the persona note, token by token         first word 0.34 s, all 0.95 s
    4. Jev reads the reply in the background, and the rules check it          0.35 s median
 ◀── NDJSON: read · decision · token … · reply · check · state
 ```
@@ -89,7 +91,7 @@ With "Google Search" on, Gemini can also search; Google runs the search, orb run
 ## Processes and ports (the signal and HTTP ports are on 127.0.0.1)
 | Process | Port | Start |
 |---|---|---|
-| Ollama (Gemma `gemma4:e2b`) | 11434 | `ollama serve` |
+| Ollama (the polish LLM `qwen2.5:1.5b`) | 11434 | `ollama serve` |
 | Agent service + web chat | 8100 | `python -m orb_agent.server` |
 | Speech service | 8200 | `python -m orb_speech.server` |
 | LiveKit server (dev) | 7880, 7881, UDP 7882 | `livekit-server --dev --bind 127.0.0.1 --node-ip 127.0.0.1` |

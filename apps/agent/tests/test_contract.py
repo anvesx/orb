@@ -57,7 +57,7 @@ def test_answer_fields():
     assert set(c.get("/health").json()) == {"ok", "agents", "sessions", "voice"}
     assert set(c.get("/v1/voice/status").json()) == {"url", "dev", "local", "proxy", "livekit", "worker"}
     models = c.get("/v1/models").json()
-    assert set(models) == {"llm", "gemini"} and set(models["llm"]) == {"default", "installed"}
+    assert set(models) == {"gemini"}
     assert set(models["gemini"]) == {"available", "only", "models", "default_model", "voices", "default_voice"}
     s = c.post("/v1/sessions", json={"topic": "Cache API answers?", "config": {"voice_mode": "gemini-live"}}).json()
     assert s["config"] == {"voice_mode": "gemini-live"}

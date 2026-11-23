@@ -2,17 +2,16 @@
 
 Code: `src/orb_bench/` · Tests: `tests/` (23) · Status: built · Last update: 2026-10-23
 
-**orb-bench proves each model choice with a measurement.** It builds git-ignored test audio, runs four scored suites
+**orb-bench proves each model choice with a measurement.** It builds git-ignored test audio, runs three scored suites
 against the running services, re-scores saved STT runs offline, and saves every result. The bench page (`/bench` of the agent service) runs the same
-suites and shows the results, and it switches the STT, LLM and TTS models for a live call.
+suites and shows the results, and it switches the STT and TTS models for a live call.
 
 | Suite | What it measures | Needs |
 |---|---|---|
 | `stt` | word error rate per engine, corpus and part; for written-form groups also fwer, entity and punct_f1; words invented from noise; time per call | the speech service |
 | `format` | the same scores for a saved `stt` run after named text stages, plus added words and the time of each stage | nothing (offline) |
 | `tts` | time to first audio, real-time factor, word error rate of a judge STT on the speech | the speech service |
-| `llm` | voice replies per model: a reply exists, short, no leaked note, the expected persona; first-token time | the agent service, Jev, Ollama |
-| `turn` | a synthetic person in a real LiveKit room: first agent audio, turn commit, early replies, noise, backchannel, echo, barge-in | every service of `scripts/dev.sh` |
+| `turn` | a synthetic person in a real LiveKit room: first agent audio, turn commit, early replies, noise, backchannel, echo, barge-in | every service of `scripts/dev.sh`, and an LLM for replies |
 
 ## 1. Input
 - **The corpus** (`python -m orb_bench corpus`, `data/testbench/corpus/`, git-ignored, 94 MB before `stt/dictation`).
@@ -27,7 +26,7 @@ suites and shows the results, and it switches the STT, LLM and TTS models for a 
   | `stt/librispeech` | 100 | LibriSpeech test-clean, 5 to 40 words; seed 11 |
   | `noise` | 24 | white, pink, brown and hum noise at 3 levels and 2 lengths, no speech |
   | `echo` | 6 | the agent's voice (Kokoro af_heart) at low levels |
-  | `llm`, `tts` | 8 cases (3 of them run 3 times), 6 texts | voice turns with expected personas, and 3 short lines about the call itself from a real call ("Can you hear me clearly?"); English, Hindi and Hinglish texts |
+  | `tts` | 6 texts | English, Hindi and Hinglish texts |
 - **The services** (`ORB_AGENT_URL`, `ORB_SPEECH_URL`; 127.0.0.1 by default). Their answers are measured, not trusted.
 - **A saved `stt` run** (the input of `format`): its rows hold `ref`, `keys`, the engine's `raw` text and the scores.
 - **The bench API** (`apps/agent/src/orb_agent/bench.py`) takes a suite name, engines, groups, models, stage names
@@ -54,10 +53,6 @@ suites and shows the results, and it switches the STT, LLM and TTS models for a 
 - **tts:** for each config (engine, voice, languages): one warm-up request (not measured: it loads the engine), then
   each text of its languages → stream `/v1/tts` → time to the first bytes and to the end → save the WAV → the judge
   hears it (Parakeet through the speech service for English, Whisper large-v3-turbo on the GPU for Hindi) → WER.
-- **llm:** for each model: one warm-up turn (Ollama loads the model), then each case in a new session with
-  `config.llm_model` → stream the voice turns → checks on the last reply. A case with `repeat` runs that many times,
-  because a model does not answer alike twice. The summary of a model has the cases, the passes, the silent replies
-  and the first-word time (median and slowest).
 - **turn** (`room.py`): the person joins the room of a new session, publishes a microphone and listens to the agent's
   track (loud = RMS above 0.01 in a 20 ms frame). It also records the worker's events from the room's data channel
   (`orb.bench`). Each case sends Kokoro speech (voice am_michael) in real time, 20 ms per frame:
@@ -94,10 +89,8 @@ suites and shows the results, and it switches the STT, LLM and TTS models for a 
 | Noise and mixing | unit RMS; the mix hits the SNR | `test_noise_is_unit_rms_and_mix_hits_the_snr` |
 | Padding | silence at both ends | `test_pad_adds_silence_at_both_ends` |
 | stt suite on fake HTTP | scored speech; invented words counted on noise | `test_stt_suite_scores_speech_and_counts_invented_words` |
-| llm suite on fake HTTP | the checks and the persona; a leaked note fails | `test_llm_suite_checks_replies_and_personas` |
 | tts suite on fake HTTP | length, judge WER, a saved WAV; one warm-up per config, no row for it | `test_tts_suite_measures_and_judges` |
 | turn summary | each failure kind counted | `test_turn_summary_counts_each_failure_kind` |
-| llm suite, repeated cases | a case with `repeat` runs that many times (`mic_check#1` …); a silent reply fails `has_reply` and is counted; the summary has the first-word p50 and the slowest | `test_llm_suite_repeats_a_case_and_counts_silent_replies` |
 | Tokens | marks split off, joiners kept, flags whole | `test_written_tokens_split_marks_but_keep_entities_whole` |
 | fwer | sees case, punctuation and number format that WER ignores | `test_fwer_sees_case_punctuation_and_number_format_that_wer_ignores` |
 | entity | exact, case-sensitive, not inside longer words | `test_entity_counts_exact_keys_not_parts_of_longer_words` |
@@ -126,7 +119,7 @@ the components and in decisions 0006 and 0007.
 - **A cloud STT engine** (Cartesia) is in the page's engine list but unchecked, and it is not in the default of the
   command line. A run with it sends the corpus audio (synthetic speech or public research sets, never a person's
   voice) to the cloud, and it costs credits (1 for each 2 s of audio, silence included: the noise clips too).
-- **Cost:** the llm and turn suites call Jev, about $0.00007 per read (README). A turn run has about 16 turns, and
+- **Cost:** the turn suite calls Jev, about $0.00007 per read (README). A turn run has about 16 turns, and
   each turn has a read of the person's message and a read of the reply, so about $0.0025 per run.
 - **No secrets in results:** a result has texts, transcripts and timings, never a key.
 - **The bench API** is on the agent service, on 127.0.0.1 only. Clip and result paths are checked to stay inside
@@ -136,7 +129,6 @@ the components and in decisions 0006 and 0007.
 | Run (Apple M5, 16 GB, 2026-10-22) | Time |
 |---|---|
 | `tts` (4 configs, 16 texts, both judges) | 1 min 39 s (run 20261022-201558) |
-| `llm` (5 models × 5 cases, a model load each) | about 10 min (run 20261022-200105) |
 | `turn` | 3 min 47 s (run 20261022-202907) |
 | `stt` (2 engines, 1074 clips each, 2148 calls; Apple M4, 16 GB, 2026-10-23) | 5 min 25 s (run 20261023-122740) |
 | `format` with `raw` on that run (2148 rows) | 1.7 s, no service (run 20261023-123334) |
@@ -145,18 +137,16 @@ the components and in decisions 0006 and 0007.
 
 **The bottleneck of `format`** is reading the run file. A formatter that takes 5 ms a row adds 11 s for the 2148 rows.
 
-The llm, tts and turn suites use the same models as a live call, so the bench page refuses a second run while one
+The tts and turn suites use the same models as a live call, so the bench page refuses a second run while one
 is going, and a live call during a run changes its numbers.
 
 ## 7. Edge cases
 | Case | What happens | Why |
 |---|---|---|
 | A corpus group is missing | the suite stops with "Run: python -m orb_bench corpus" | the corpus is not in git |
-| An LLM writes no words for a turn | the row fails `has_reply`, and the summary counts it as silent | hidden tokens used up the limit (decision 0007); the first suite had only clean lines and missed it |
 | An engine does not load | its rows have the error; the other engines go on | 503 from the speech service |
 | Kokoro speech ends with silence | `first_audio_s` counts from the end of the clip, silence included | the numbers favor the agent by that silence, in every run alike |
 | Hinglish texts | the judge writes English words in Devanagari, so the WER is too high | a judge limit, noted with the results |
-| A model reloads during the llm suite | not measured: one warm-up turn per model | Ollama keeps one model in memory |
 | A key appears in the wrong place | the entity still counts it | the check is exact text, not position; a stage that moves text is caught by fwer |
 | "p.m." in the output | its dot counts as a mark after a word in punct_f1 | the tokenizer cannot tell an abbreviation from a sentence end; it lowers the score of engines that write "p.m." |
 | A stored run has no `keys`, `raw` or `written` (made before 2026-10-23) | `format` uses `hyp` for `raw` and scores no written-form metric | old rows do not have them; run `stt` again |

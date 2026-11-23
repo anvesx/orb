@@ -165,8 +165,7 @@ async def entry(ctx: JobContext) -> None:
                 "style": cfg.get("tts_style", ""), "lang": cfg.get("tts_lang", "")}
     log.info("agent session ready", extra={"session": sid, "ms": round((time.perf_counter() - t0) * 1000),
                                            "stt": stt_name, "stt_interim": interim_name,
-                                           "tts": tts_opts["engine"] or "default",
-                                           "llm": cfg.get("llm_model") or "default"})
+                                           "tts": tts_opts["engine"] or "default"})
 
     tracker = TurnTracker()
     debug_dir = str(Path(s.debug_audio_dir) / sid) if s.debug_audio_dir else ""
@@ -231,7 +230,7 @@ async def entry(ctx: JobContext) -> None:
     load = None if is_cloud else asyncio.create_task(batch.load())
     await session.start(room=ctx.room, agent=Agent(instructions="The orb agent service writes every reply."))
     stt_label = f"{stt_name}{' (cloud)' if is_cloud else ''}, interim {interim_name}"
-    bench.send("session", session=sid, stt=stt_label, llm=cfg.get("llm_model") or "default",
+    bench.send("session", session=sid, stt=stt_label,
                tts=tts_opts["engine"] or "default", voice=tts_opts["voice"] or "default", vad="silero",
                turn="livekit-v1-mini")
     if load:

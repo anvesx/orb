@@ -5,7 +5,6 @@
     python -m orb_bench run format [--source <stt run>] [--stages raw,written] [--define written=pkg.mod:func]
                                    [--engines parakeet] [--groups stt/dictation]    # offline, no service needed
     python -m orb_bench run tts [--no-judge]
-    python -m orb_bench run llm [--models gemma4:e2b,qwen3:4b]
     python -m orb_bench run turn                                 # needs every service of scripts/dev.sh
     python -m orb_bench show <suite> [run]
 
@@ -45,16 +44,6 @@ def show(result: dict) -> None:
                 continue
             print(f"{r['engine']:8s} {str(r['voice']):10s} {r['text_id']:9s} {r['first_audio_s']:10.2f}s "
                   f"{r['rtf']:6.2f} {r['audio_s']:5.1f}s {pct(r.get('wer')):>6s}")
-    elif suite == "llm":
-        for s in result["summary"]:
-            print(f"{s['model']}: {s['passed']} of {s['cases']} cases pass, {s.get('silent', 0)} silent, first word "
-                  f"p50 {num(s.get('first_token_p50'), 2)} s, slowest {num(s.get('first_token_max'), 2)} s")
-        for r in result["rows"]:
-            failed = [k for k, v in (r.get("checks") or {}).items() if not v]
-            t = r.get("timing") or {}
-            print(f"  {r['model']:18s} {r['case']:12s} first token {num(r.get('first_token_s'), 2)}s "
-                  f"(LLM {t.get('llm_first_token')}s) {'FAILED ' + ','.join(failed) if failed else 'ok'}"
-                  f"{' ERROR ' + str(r['error'])[:60] if r.get('error') else ''}")
     else:
         print(json.dumps(result.get("summary"), indent=1))
         for r in result["rows"]:
@@ -81,17 +70,16 @@ def main() -> None:
     c = sub.add_parser("corpus")
     c.add_argument("--only", default="")
     r = sub.add_parser("run")
-    r.add_argument("suite", choices=["stt", "format", "tts", "llm", "turn"])
+    r.add_argument("suite", choices=["stt", "format", "tts", "turn"])
     r.add_argument("--engines", default="whistle,parakeet")
     r.add_argument("--source", default=None, help="format: the stt run to re-score (default: the newest)")
     r.add_argument("--stages", default="raw", help="format: stage combinations, e.g. raw,written,vocab+written")
     r.add_argument("--define", action="append", default=[], help="format: name=package.module:function")
     r.add_argument("--groups", default="")
-    r.add_argument("--models", default="")
     r.add_argument("--limit", type=int, default=None)
     r.add_argument("--no-judge", action="store_true")
     s = sub.add_parser("show")
-    s.add_argument("suite", choices=["stt", "format", "tts", "llm", "turn"])
+    s.add_argument("suite", choices=["stt", "format", "tts", "turn"])
     s.add_argument("run", nargs="?")
     a = ap.parse_args()
     if a.cmd == "corpus":
@@ -103,7 +91,7 @@ def main() -> None:
         else:
             show(res)
     else:
-        from orb_bench.suites import format as fmt, llm, stt, tts, turn
+        from orb_bench.suites import format as fmt, stt, tts, turn
         if a.suite == "format":
             for d in a.define:
                 name, _, path = d.partition("=")
@@ -115,8 +103,6 @@ def main() -> None:
             res = stt.run(a.engines.split(","), groups, SPEECH, a.limit, progress=print)
         elif a.suite == "tts":
             res = tts.run(speech_url=SPEECH, judge=not a.no_judge, progress=print)
-        elif a.suite == "llm":
-            res = llm.run([m for m in a.models.split(",") if m] or None, AGENT, progress=print)
         else:
             res = turn.run(AGENT, SPEECH, progress=print)
         show(res)

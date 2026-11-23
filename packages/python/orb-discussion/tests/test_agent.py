@@ -4,8 +4,7 @@ import re
 
 from conftest import FakeLLM, ScriptedReader
 
-from orb_core.agent import Agent, ReplyWriter, Session
-from orb_core.ollama import OllamaError
+from orb_core.agent import Agent, LLMError, ReplyWriter, Session
 from orb_discussion.agent import DiscussionAgent
 
 
@@ -26,6 +25,17 @@ async def run_turn(session, text, channel="web"):
 def test_agent_and_session_follow_the_interface():
     agent, session, _ = make([], [])
     assert isinstance(agent, Agent) and isinstance(session, Session)
+
+
+def test_without_an_llm_a_turn_changes_nothing_and_a_note_still_works():
+    agent = DiscussionAgent(ScriptedReader([{"claims": 1}]), load_source=no_source)
+    s = agent.new_session("Should our assistant store passwords?", "test-1")
+    events = asyncio.run(run_turn(s, "We should store passwords in a JSON file."))
+    assert [e.type for e in events] == ["error"] and "no LLM" in events[0].data
+    assert s.messages == [] and asyncio.run(agent.health())["llm"] is None
+    asyncio.run(s.prepare())
+    types = [e.type for e in asyncio.run(collect(s.note("We should store passwords in a JSON file.")))]
+    assert types == ["read", "decision"] and len(s.messages) == 1
 
 
 def test_one_full_turn():
@@ -86,7 +96,7 @@ def test_reader_failure_on_the_reply_keeps_the_ledger_in_step():
 
 
 def test_llm_failure_ends_the_turn_with_an_error():
-    agent, s, llm = make([{"claims": 1}], [], fail=OllamaError("model not found"))
+    agent, s, llm = make([{"claims": 1}], [], fail=LLMError("model not found"))
     events = asyncio.run(run_turn(s, "We should store passwords in a JSON file."))
     assert [e.type for e in events] == ["read", "decision", "error"]
     assert "model not found" in events[-1].data

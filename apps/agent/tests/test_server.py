@@ -139,59 +139,25 @@ def test_voice_config_rules(monkeypatch):
         VoiceConfig.from_env()
 
 
-def test_session_config_picks_an_llm_and_the_worker_reads_it(tmp_path):
-    made = []
-
-    class NamedLLM(FakeLLM):
-        def __init__(self, model):
-            self.model = model
-
-        async def stream(self, messages, options=None):
-            yield f"from {self.model}"
-
-    def model_agent(model):
-        made.append(model)
-        reader = ScriptedReader([{"claims": 1}])
-        return DiscussionAgent(reader, NamedLLM(model), load_source=lambda url: {"url": url, "error": "offline"})
-
-    async def installed():
-        return ["fake", "qwen3:4b"]
-
+def test_session_config_holds_the_speech_models_that_the_worker_reads(tmp_path):
     base = DiscussionAgent(ScriptedReader([]), FakeLLM(), load_source=lambda url: {"url": url, "error": "offline"})
-    app = create_app(SessionStore({"discussion": base}, save_dir=tmp_path), None, model_agent=model_agent,
-                     installed_models=installed, default_model="fake")
-    c = local(app)
-    assert c.get("/v1/models").json()["llm"] == {"default": "fake", "installed": ["fake", "qwen3:4b"]}
-
-    cfg = {"stt_engine": "parakeet", "llm_model": "qwen3:4b", "tts_engine": "kokoro", "tts_voice": "hf_alpha",
-           "tts_lang": "hi"}
+    c = local(create_app(SessionStore({"discussion": base}, save_dir=tmp_path), None))
+    assert set(c.get("/v1/models").json()) == {"gemini"}
+    cfg = {"stt_engine": "parakeet", "tts_engine": "kokoro", "tts_voice": "hf_alpha", "tts_lang": "hi"}
     s = c.post("/v1/sessions", json={"topic": "Bench", "config": cfg}).json()
-    assert s["config"] == cfg and made == ["qwen3:4b"]
-    sid = s["id"]
-    lines = [json.loads(x) for x in c.post(f"/v1/sessions/{sid}/turns", json={"text": "We should hash passwords."}).iter_lines() if x]
-    assert "".join(e["data"] for e in lines if e["type"] == "token") == "from qwen3:4b"
-    assert c.get(f"/v1/sessions/{sid}").json()["config"]["llm_model"] == "qwen3:4b"  # what the voice worker reads
-
-    # a second session with the same model reuses its agent; the default model needs no new agent
-    c.post("/v1/sessions", json={"topic": "Bench 2", "config": {"llm_model": "qwen3:4b"}})
-    c.post("/v1/sessions", json={"topic": "Default", "config": {"llm_model": "fake"}})
-    assert made == ["qwen3:4b"]
+    assert s["config"] == cfg and c.get(f"/v1/sessions/{s['id']}").json()["config"] == cfg
+    assert c.put(f"/v1/sessions/{s['id']}/config", json={"tts_voice": "am_michael"}).json() == {**cfg, "tts_voice": "am_michael"}
 
 
-def test_session_config_refuses_unknown_models_and_llm_changes(tmp_path):
-    async def installed():
-        return ["fake"]
-
-    base = DiscussionAgent(ScriptedReader([]), FakeLLM(), load_source=lambda url: {"url": url, "error": "offline"})
-    app = create_app(SessionStore({"discussion": base}, save_dir=tmp_path), None, installed_models=installed,
-                     model_agent=lambda m: base, default_model="fake")
-    c = local(app)
-    r = c.post("/v1/sessions", json={"topic": "x", "config": {"llm_model": "llama-huge"}})
-    assert r.status_code == 400 and "no model 'llama-huge'" in r.json()["error"] and "fake" in r.json()["error"]
-    sid = c.post("/v1/sessions", json={"topic": "x"}).json()["id"]
-    assert c.put(f"/v1/sessions/{sid}/config", json={"tts_voice": "am_michael"}).json() == {"tts_voice": "am_michael"}
-    r = c.put(f"/v1/sessions/{sid}/config", json={"llm_model": "other"})
-    assert r.status_code == 400 and "fixed when it starts" in r.json()["error"]
+def test_a_service_without_an_llm_says_so_on_a_turn_and_still_takes_notes(tmp_path):
+    agent = DiscussionAgent(ScriptedReader([{"claims": 1}]), load_source=lambda url: {"url": url, "error": "offline"})
+    c = local(create_app(SessionStore({"discussion": agent}, save_dir=tmp_path), None))
+    assert c.get("/health").json()["agents"]["discussion"]["llm"] is None
+    sid = c.post("/v1/sessions", json={"topic": "Should our assistant store passwords?"}).json()["id"]
+    lines = [json.loads(x) for x in c.post(f"/v1/sessions/{sid}/turns", json={"text": "We should hash."}).iter_lines() if x]
+    assert [e["type"] for e in lines] == ["error"] and "no LLM" in lines[0]["data"]
+    r = c.post(f"/v1/sessions/{sid}/notes", json={"text": "We should store passwords in a JSON file."})
+    assert r.status_code == 200 and set(r.json()) == {"read", "decision"}
 
 
 def test_the_bench_tools_are_tabs_of_the_chat_page(app_and_dir):
@@ -201,9 +167,9 @@ def test_the_bench_tools_are_tabs_of_the_chat_page(app_and_dir):
     r = c.get("/bench", follow_redirects=False)
     assert r.status_code == 307 and r.headers["location"] == "/"   # the old address of the bench page still works
     html = c.get("/").text
-    for tab in ("chat", "stt", "tts", "llm", "suites"):
+    for tab in ("chat", "stt", "tts", "suites"):
         assert f'data-tab="{tab}"' in html and f'id="tab-{tab}"' in html
-    for bar in ("m-stt", "m-llm", "m-tts", "m-voice", "m-lang", "m-style"):
+    for bar in ("m-stt", "m-tts", "m-voice", "m-lang", "m-style"):
         assert f'id="{bar}"' in html
     # every element that the script looks up by id is in the page: a typo would stop the whole script
     script = html[html.index("<script>", html.index("livekit-client")):]
