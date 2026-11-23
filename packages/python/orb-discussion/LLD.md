@@ -4,7 +4,8 @@ Code: `src/orb_discussion/` · Tests: `tests/` (39) · Status: built · Last upd
 
 **The discussion agent is an AI partner that does not just agree.** Jev reads each message with yes/no
 questions, fixed debt rules turn the answers into debts, the most urgent due debt picks one of six personas,
-and a local LLM (Gemma) writes the reply with that persona.
+and an LLM writes the reply with that persona. Since decision 0019 there is no LLM: `turn` says so and changes
+nothing, and Gemini Live writes the replies through `note` and `add_reply`.
 
 | File | Job |
 |---|---|

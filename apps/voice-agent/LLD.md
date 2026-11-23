@@ -36,7 +36,7 @@ Relic page "Gemini tools" is built on it.
 |---|---|---|
 | A job for each new room | the LiveKit server (automatic dispatch, no agent name) | the dev server on 127.0.0.1 |
 | The person's audio, 48 kHz | the room | untrusted: noise, echo and any words |
-| The session config `{stt_engine, llm_model, tts_engine, tts_voice, tts_style, tts_lang, voice_mode, gemini_model, gemini_voice, gemini_personas, gemini_search}` | `PUT /v1/sessions/{id}` of the agent service, at join | checked by the agent service |
+| The session config `{stt_engine, tts_engine, tts_voice, tts_style, tts_lang, voice_mode, gemini_model, gemini_voice, gemini_personas, gemini_search}` | `PUT /v1/sessions/{id}` of the agent service, at join | checked by the agent service |
 | Settings (table in section 3) | the environment; the repo `.env` fills in only unset `ORB_*` and `LIVEKIT_*` keys and `GOOGLE_API_KEY` | the operator |
 
 The room name gives the session (`orb_core.rooms`, shared with the agent service): `orb-<id>` is the session `<id>`

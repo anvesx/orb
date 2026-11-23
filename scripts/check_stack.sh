@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Start the whole orb stack, test it, and stop it again. The exit code is 0 when every check passed.
 #
-#   scripts/check_stack.sh              # unit tests, the stack, the live checks, the voice end-to-end test, then stop
+#   scripts/check_stack.sh              # unit tests, the stack and the live checks, then stop
 #   scripts/check_stack.sh --quick      # only the stack and the live checks (about 1 minute)
 #   scripts/check_stack.sh --no-unit    # skip the unit tests
-#   scripts/check_stack.sh --no-e2e     # skip the voice end-to-end test (about 2 minutes)
+#   scripts/check_stack.sh --e2e        # also the voice end-to-end test (about 2 minutes; it needs an LLM for replies)
 #   scripts/check_stack.sh --no-tunnel  # no ngrok, also when ORB_NGROK_DOMAIN is set
 #
-# The live checks use the Jev API (about 10 reads, under $0.001) and the local LLM. No audio leaves this computer.
+# The live checks use the Jev API (about 10 reads, under $0.001) and the local polish LLM. No audio leaves this computer.
 # It does not touch a stack that already runs: when a port is busy, it stops at once and says which one.
 # It stops everything that it started, also after a failed check and after Ctrl+C.
 # Logs: data/logs/check/<time>/   Exit codes: 0 every check passed, 1 a check failed, 2 it could not start (nothing changed).
@@ -21,12 +21,12 @@ AGENT=http://127.0.0.1:8100
 SPEECH=http://127.0.0.1:8200
 PORTS="8100 8200 8081 7880"
 
-UNIT=1; E2E=1; TUNNEL=1
+UNIT=1; E2E=0; TUNNEL=1
 for arg in "$@"; do
   case "$arg" in
     --quick) UNIT=0; E2E=0 ;;
     --no-unit) UNIT=0 ;;
-    --no-e2e) E2E=0 ;;
+    --e2e) E2E=1 ;;
     --no-tunnel) TUNNEL=0 ;;
     -h|--help) awk 'NR > 1 && /^#/ {sub(/^# ?/, ""); print; next} NR > 1 {exit}' "$0"; exit 0 ;;
     *) echo "Unknown option: $arg. Try --help." >&2; exit 2 ;;
@@ -162,15 +162,12 @@ unit_tests() {
 }
 
 c_ollama() {
-  curl -sf -m 5 http://127.0.0.1:11434/api/tags | ORB_LLM_MODEL="$(setting ORB_LLM_MODEL)" \
-    ORB_POLISH_MODEL="$(setting ORB_POLISH_MODEL)" "$PY" -I -c '
+  curl -sf -m 5 http://127.0.0.1:11434/api/tags | ORB_POLISH_MODEL="$(setting ORB_POLISH_MODEL)" "$PY" -I -c '
 import json, os, sys
 names = [m["name"] for m in json.load(sys.stdin)["models"]]
-want = os.environ.get("ORB_LLM_MODEL") or "gemma4:e2b"
 polish = os.environ.get("ORB_POLISH_MODEL") or "qwen2.5:1.5b"
-assert want in names, f"the LLM {want} is not installed; installed: {names}"
 assert polish in names, f"the polish LLM {polish} is not installed (ollama pull {polish}); installed: {names}"
-print(f"Ollama answers, and the LLM {want} and the polish LLM {polish} are installed")
+print(f"Ollama answers, and the polish LLM {polish} is installed")
 '
 }
 
@@ -185,8 +182,8 @@ import json, sys
 h = json.load(sys.stdin)
 llm = h["agents"]["discussion"]["llm"]
 assert h["ok"], h
-assert llm.get("ok"), f"the LLM is not ready: {llm}"
-print("the agent service answers; the LLM is", llm["model"])
+assert llm is None or llm.get("ok"), f"the LLM is not ready: {llm}"
+print("the agent service answers;", "the LLM is " + llm["model"] if llm else "it has no LLM (Gemini Live writes the replies)")
 '
 }
 
@@ -248,23 +245,18 @@ c_gate() {
   echo "this computer gets 200; a foreign Host and a proxy header get 403; the voice signal reaches LiveKit ($code without a token)"
 }
 
-c_text_turn() {
+c_note() {
   "$PY" -I - "$AGENT" <<'EOF'
-import json, sys, time, httpx
+import sys, time, httpx
 agent = sys.argv[1]
 with httpx.Client(timeout=180) as c:
     s = c.post(f"{agent}/v1/sessions", json={"topic": "Check of the stack"}).json()
-    t0, events = time.monotonic(), []
-    body = {"text": "We should store passwords in a plain JSON file.", "channel": "web"}
-    with c.stream("POST", f"{agent}/v1/sessions/{s['id']}/turns", json=body) as r:
-        r.raise_for_status()
-        events = [json.loads(line) for line in r.iter_lines() if line]
-kinds = [e["type"] for e in events]
-assert "error" not in kinds, [e for e in events if e["type"] == "error"]
-reply = "".join(e["data"] for e in events if e["type"] == "token")
-assert len(reply.split()) >= 3, f"the reply is too short: {reply!r}; events: {kinds}"
-decision = next((e["data"] for e in events if e["type"] == "decision"), {})
-print(f"one turn took {time.monotonic() - t0:.1f} s; persona {decision.get('persona')}; reply {reply[:70]!r}")
+    t0 = time.monotonic()
+    r = c.post(f"{agent}/v1/sessions/{s['id']}/notes", json={"text": "We should store passwords in a plain JSON file."})
+    r.raise_for_status()
+decision = r.json()["decision"]
+assert decision.get("note"), decision
+print(f"one note took {time.monotonic() - t0:.1f} s; persona {decision.get('persona')}")
 EOF
 }
 
@@ -356,14 +348,14 @@ fi
 echo "Starting the stack (scripts/dev.sh)..."
 start_stack
 if run_check "the stack starts" wait_ready; then
-  run_check "Ollama and the LLM" c_ollama
+  run_check "Ollama and the polish LLM" c_ollama
   run_check "agent service health" c_agent
   run_check "Gemini key (Gemini Live mode)" c_gemini_key
   run_check "voice status" c_voice_status
   run_check "speech service" c_speech
   run_check "speech round trip (TTS, then STT)" c_speech_roundtrip
   run_check "access gate and voice signal forwarder" c_gate
-  run_check "one text turn (Jev, debt rules, LLM)" c_text_turn
+  run_check "one persona note (Jev, debt rules)" c_note
   if (( WITH_TUNNEL )); then
     run_check "through the ngrok domain" c_tunnel
   fi

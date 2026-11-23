@@ -10,7 +10,7 @@ Groups (each in corpus/<group>/ with a manifest.json; every audio clip went thro
 - stt/librispeech: 100 LibriSpeech test-clean utterances of 5 to 40 words (read speech; seed 11).
 - noise: no speech at all (white, pink, brown, hum) at three levels and two lengths. Any word is invented.
 - echo: the agent's own voice at a low level, as from laptop speakers into the microphone.
-- llm/cases.json and tts/texts.json: text cases.
+- tts/texts.json: text cases.
 
 Licenses: EdAcc and LibriSpeech are CC-BY licensed research sets; their audio stays in data/testbench, never in git.
 """
@@ -46,22 +46,6 @@ VOICES = [("af_heart", "en-us"), ("am_michael", "en-us"), ("bf_emma", "en-gb"), 
 SNRS = (None, 20, 10, 5)
 DICTATION_SNRS = (None, 10)
 
-LLM_CASES = [
-    {"id": "passwords", "turns": ["We should store user passwords in a plain JSON file so the assistant can log in for them."],
-     "expect": {"persona": "Rival"}},
-    {"id": "disagree", "turns": ["We should store user passwords in a plain JSON file so the assistant can log in for them.",
-                                 "No, I don't agree with you."], "expect": {"persona": "Examiner"}},
-    {"id": "summary", "turns": ["Let's design the login flow for our app.", "Can you summarize where we are?"], "expect": {}},
-    {"id": "gst", "turns": ["Our client asks whether they can claim GST input credit on a company car."], "expect": {}},
-    {"id": "backchannel", "turns": ["Okay."], "expect": {}},
-    # Lines of a real call (2026-10-22): short, and about the call itself. On such lines gemma4:e2b writes 200 to 370
-    # hidden tokens before its first word, and an agent with a small token limit stayed silent. The hidden text changes
-    # from run to run, so each line runs 3 times.
-    {"id": "mic_check", "turns": ["Can you hear me clearly? I don't know you are listening or not."], "expect": {},
-     "repeat": 3},
-    {"id": "hello", "turns": ["Hello, can you listen me? Then reply past."], "expect": {}, "repeat": 3},
-    {"id": "are_you_there", "turns": ["Hello? Are you there?"], "expect": {}, "repeat": 3},
-]
 TTS_TEXTS = [
     {"id": "short", "text": "Sure, let's do that.", "lang": "en-us"},
     {"id": "question", "text": "What would happen to the passwords if the file were copied by mistake?", "lang": "en-us"},
@@ -233,10 +217,9 @@ def echo(log=print) -> int:
 
 
 def texts(log=print) -> int:
-    _save("llm", LLM_CASES)
     _save("tts", TTS_TEXTS)
-    log(f"llm: {len(LLM_CASES)} cases; tts: {len(TTS_TEXTS)} texts")
-    return len(LLM_CASES) + len(TTS_TEXTS)
+    log(f"tts: {len(TTS_TEXTS)} texts")
+    return len(TTS_TEXTS)
 
 
 BUILDERS = {"texts": texts, "stt/synthetic": stt_synthetic, "stt/dictation": stt_dictation, "noise": noise_only, "echo": echo,

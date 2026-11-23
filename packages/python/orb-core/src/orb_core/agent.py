@@ -96,6 +96,10 @@ class InputError(ValueError):
     """The input breaks a limit or a format rule. The message says which one."""
 
 
+class LLMError(RuntimeError):
+    """The LLM that writes the replies failed. The message says how."""
+
+
 def new_session_id() -> str:
     return time.strftime("%Y%m%d-%H%M%S").lower() + "-" + secrets.token_hex(3)
 

@@ -6,5 +6,5 @@ in [LLD.md](LLD.md).
 ```sh
 JEV_ENV_FILE=~/jev-test/.env python -m orb_agent.server     # http://127.0.0.1:8100
 ```
-It needs Ollama with `gemma4:e2b`. For voice, also run LiveKit, the speech service and `apps/voice`, or run
+It has no LLM for replies yet (decision 0019): Gemini Live writes them. For voice, also run LiveKit, the speech service and `apps/voice`, or run
 everything with `make dev`.

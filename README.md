@@ -24,7 +24,7 @@ in local voice. **On 2026-10-22** the voice worker moved to LiveKit Agents, and 
                        │
                        ▼
  BRAIN           the discussion agent (orb-discussion), behind the agent interface (orb_core.agent)
-                 one turn:  Jev reads the message ─▶ debt rules ─▶ one of six personas ─▶ Gemma writes ─▶ check
+                 one turn:  Jev reads the message ─▶ debt rules ─▶ one of six personas ─▶ an LLM writes ─▶ check
 ```
 **The brain packages (orb-discussion and the agent interface) import no voice code**, and `server.py` keeps the voice
 routes in `voice.py`; a test checks both. Another channel or another voice stack uses the same brain through the same

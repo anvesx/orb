@@ -3,7 +3,7 @@
 One turn:
 1. Jev reads the person's message (one request, yes/no questions). The rules update the debts.
 2. The rules choose the need: the most urgent due debt. Its kind picks the persona.
-3. The LLM writes the reply with the persona note. Tokens stream to the channel.
+3. The LLM writes the reply with the persona note. Tokens stream to the channel. Without an LLM, `turn` says so.
 4. Jev reads the reply in the background. The rules check whether the reply paid the need.
    The next turn waits for step 4, so the ledger always has every message in order.
 
@@ -26,15 +26,15 @@ import time
 from difflib import SequenceMatcher
 
 from orb_core import web
-from orb_core.agent import Event, check_text
+from orb_core.agent import Event, LLMError, check_text
 from orb_core.jev import cost_usd
-from orb_core.ollama import OllamaError
 from orb_discussion import prompt
 from orb_discussion.engine import DebtEngine
 from orb_discussion.personas import PERSONAS, VOICE_MAX_CHARS, VOICE_MAX_TOKENS
 from orb_discussion.rules import mid
 
 log = logging.getLogger("orb.discussion")
+NO_LLM = "This orb has no LLM to write replies yet, so nothing changed. A Gemini Live call works without one."
 
 
 def summarize(entry: dict) -> dict:
@@ -68,7 +68,8 @@ def continues(old: str, new: str) -> bool:
 class DiscussionAgent:
     name = "discussion"
 
-    def __init__(self, reader, llm, load_source=web.load):
+    def __init__(self, reader, llm=None, load_source=web.load):
+        """`llm` streams the replies (`stream`, `warm`, `health`); None: only another writer replies (Gemini Live)."""
         self.reader = reader
         self.llm = llm
         self.load_source = load_source
@@ -77,7 +78,7 @@ class DiscussionAgent:
         return DiscussionSession(self, topic, session_id)
 
     async def health(self) -> dict:
-        return {"reader": type(self.reader).__name__, "llm": await self.llm.health()}
+        return {"reader": type(self.reader).__name__, "llm": await self.llm.health() if self.llm else None}
 
 
 class DiscussionSession:
@@ -119,7 +120,7 @@ class DiscussionSession:
                 if self.source.get("title"):
                     self.engine.ledger.topic = f"{self.title} (source: {self.source['title']})"
             self._source_loaded = True
-            if not warm:
+            if not warm or self.agent.llm is None:
                 self.version += 1
                 return
             await self.agent.llm.warm([{"role": "system", "content": self.system_prompt()},
@@ -138,6 +139,9 @@ class DiscussionSession:
     # --- one turn ---
     async def turn(self, text: str, channel: str = "web", replace_last: bool = False):
         text = check_text(text)
+        if self.agent.llm is None:
+            yield Event("error", NO_LLM)
+            return
         t_enter = time.perf_counter()
         await self.settle()
         async with self._lock:
@@ -180,7 +184,7 @@ class DiscussionSession:
                     parts.append(tail)
                     yield Event("token", tail)
                 completed = not cut
-            except OllamaError as e:
+            except LLMError as e:
                 error = str(e)
             finally:
                 if cleaner.dropped:

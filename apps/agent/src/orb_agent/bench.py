@@ -18,8 +18,8 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 log = logging.getLogger("orb.agent.bench")
-CORPUS_GROUPS = ("stt/synthetic", "stt/dictation", "stt/edacc", "stt/librispeech", "noise", "echo", "llm", "tts")
-SUITES = ("stt", "format", "tts", "llm", "turn")
+CORPUS_GROUPS = ("stt/synthetic", "stt/dictation", "stt/edacc", "stt/librispeech", "noise", "echo", "tts")
+SUITES = ("stt", "format", "tts", "turn")
 
 
 class ClipCheck(BaseModel):
@@ -32,7 +32,6 @@ class RunIn(BaseModel):
     suite: str
     engines: list[str] | None = None
     groups: list[str] | None = None
-    models: list[str] | None = None
     stages: list[str] | None = Field(default=None, max_length=8)  # format suite: "raw", "written", "vocab+written" ...
     limit: int | None = Field(default=None, ge=1, le=1000)
     judge: bool = True
@@ -128,7 +127,7 @@ def make_router(speech_url: str, agent_url: str) -> APIRouter:
         return {**d, "ref": item["ref"], "wer": e / n if n else None, "rtt_ms": round((time.perf_counter() - t0) * 1000, 1)}
 
     def run_job(job: dict, body: RunIn) -> None:
-        from orb_bench.suites import format as fmt, llm, stt, tts, turn
+        from orb_bench.suites import format as fmt, stt, tts, turn
         progress = lambda line: job["progress"].append(line)
         try:
             if body.suite == "format":
@@ -138,8 +137,6 @@ def make_router(speech_url: str, agent_url: str) -> APIRouter:
                               body.limit, progress=progress)
             elif body.suite == "tts":
                 res = tts.run(speech_url=speech_url, judge=body.judge, progress=progress)
-            elif body.suite == "llm":
-                res = llm.run(body.models, agent_url, progress=progress)
             else:
                 res = turn.run(agent_url, speech_url, progress=progress)
             job.update(status="done", run=res["run"], summary=res.get("summary"))

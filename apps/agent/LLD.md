@@ -38,13 +38,13 @@ Today it hosts one agent, `discussion`, with one instance for each LLM that a se
 
 **Every route needs the key when the request is remote** (the access gate, section 2).
 
-The session config: `stt_engine`, `llm_model`, `tts_engine`, `tts_voice` (≤ 400 characters: a maya1 voice is a
-description), `tts_style` and `tts_lang`. The service checks `llm_model` against Ollama's installed models. The
-speech service checks the rest when the voice worker uses them. Gemini Live (docs/design/gemini-live.md):
+The session config: `stt_engine`, `tts_engine`, `tts_voice` (≤ 400 characters: a maya1 voice is a description),
+`tts_style` and `tts_lang`. The speech service checks them when the voice worker uses them. The service has no LLM for
+replies yet (decision 0019): a turn answers with an `error` event that says so, and `/health` shows `llm: null`. Gemini Live (docs/design/gemini-live.md):
 `voice_mode` (`orb` or `gemini-live`), `gemini_model`, `gemini_voice`, and the switches `gemini_personas` and
 `gemini_search` (decision 0018; the personas need `gemini-3.8-live`), checked against `orb_core.gemini`; a
 `gemini-live` config without `GOOGLE_API_KEY` gets 400 with what to do. A session that starts in `gemini-live` loads its
-source but never warms the LLM (gemma4:e2b is 7.9 GB, and the call does not use it). With `ORB_GEMINI_ONLY=1`
+source but never warms an LLM (the call does not use one). With `ORB_GEMINI_ONLY=1`
 (`scripts/dev.sh --gemini`) a voice config that asks for the orb pipeline gets 400, no session warms the LLM, and
 `/v1/models` says `gemini.only` (the page then offers only Gemini Live).
 

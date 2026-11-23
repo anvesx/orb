@@ -11,7 +11,7 @@ POST /v1/sessions/{id}/turns      {"text", "channel"?, "replace_last"?}
 POST /v1/sessions/{id}/notes      {"text", "channel"?, "replace_last"?} -> {"read", "decision"}: a note for another writer
 POST /v1/sessions/{id}/replies    {"text", "channel"?, "interrupted"?} -> {"check", "state"}: what that writer said
 GET  /v1/sessions/{id}/instructions                         -> {"instructions"}: the system prompt for Gemini Live
-GET  /v1/models                                             -> {"llm": {...}, "gemini": {available, models, voices, ...}}
+GET  /v1/models                                             -> {"gemini": {available, models, voices, ...}}
 POST /v1/voice/token              {"session_id"}            -> {"url", "token", "room", "identity"}
 GET  /v1/voice/status                                       -> {"url", "dev", "local", "livekit", "worker"} or null
 GET  /health
@@ -45,7 +45,6 @@ STATIC = Path(__file__).parent / "static"
 class SessionConfig(BaseModel):
     """The models of one session, chosen in the bench. Empty fields use the service defaults."""
     stt_engine: str | None = Field(default=None, max_length=32)
-    llm_model: str | None = Field(default=None, max_length=64)
     tts_engine: str | None = Field(default=None, max_length=32)
     tts_voice: str | None = Field(default=None, max_length=400)
     tts_style: str | None = Field(default=None, max_length=64)
@@ -82,13 +81,12 @@ class ReplyIn(BaseModel):
     interrupted: bool = False
 
 
-def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_agent=None, installed_models=None,
-               default_model: str = "", speech_url: str | None = None, self_url: str = "http://127.0.0.1:8100",
-               share_key: str | None = None, probe=None, worker_port: int | None = None, livekit_probe=None,
-               gemini_available=None, gemini_only: bool = False) -> FastAPI:
-    """`model_agent(model)` makes an agent that uses another LLM; `installed_models()` lists the models it may use.
-    With `speech_url`, the bench API (bench.py) is on too. `share_key` lets a remote request in (access.py). The voice
-    arguments go to `VoiceChannel` (voice.py)."""
+def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, speech_url: str | None = None,
+               self_url: str = "http://127.0.0.1:8100", share_key: str | None = None, probe=None,
+               worker_port: int | None = None, livekit_probe=None, gemini_available=None,
+               gemini_only: bool = False) -> FastAPI:
+    """With `speech_url`, the bench API (bench.py) is on too. `share_key` lets a remote request in (access.py). The
+    voice arguments go to `VoiceChannel` (voice.py)."""
     app = FastAPI(title="orb agent", docs_url=None, redoc_url=None)
     app.add_middleware(AccessMiddleware, key=check_key(share_key))  # checked here: Starlette makes the middleware at the first request
     channel = VoiceChannel(voice, probe=probe, worker_port=worker_port, livekit_probe=livekit_probe,
@@ -115,19 +113,6 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
         return s
 
     app.include_router(channel.router(session_or_404))
-
-    async def agent_for(body: NewSession) -> str | None:
-        """The agent of a new session: the default one, or one for the LLM that the config names."""
-        model = body.config.llm_model if body.config else None
-        if not model or model == default_model or model_agent is None:
-            return body.agent
-        name = f"discussion@{model}"
-        if name not in store.agents:
-            models = await installed_models() if installed_models else []
-            if model not in models:
-                raise HTTPException(400, f"Ollama has no model {model!r}. Installed: {', '.join(models) or 'none'}.")
-            store.agents[name] = model_agent(model)
-        return name
 
     def with_config(s) -> dict:
         return {**s.state(), "config": configs.get(s.id, {})}
@@ -172,9 +157,8 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
     @app.post("/v1/sessions", status_code=201)
     async def create(body: NewSession):
         config = checked(body.config)
-        agent = await agent_for(body)
         try:
-            s = started(store.create(body.topic, agent), config)
+            s = started(store.create(body.topic, body.agent), config)
         except InputError as e:
             raise HTTPException(400, str(e))
         if config:
@@ -183,15 +167,12 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
 
     @app.get("/v1/models")
     async def models():
-        return {"llm": {"default": default_model, "installed": await installed_models() if installed_models else []},
-                "gemini": channel.models()}
+        return {"gemini": channel.models()}
 
     @app.put("/v1/sessions/{sid}/config")
     async def set_config(sid: str, body: SessionConfig):
         s = session_or_404(sid)
         old = configs.get(sid, {})
-        if body.llm_model and body.llm_model != old.get("llm_model", default_model):
-            raise HTTPException(400, "The LLM of a session is fixed when it starts. Start a new session for another LLM.")
         # checked as a whole: a change of gemini_model alone in a gemini-live session still needs the key
         configs[sid] = checked(SessionConfig(**{**old, **body.model_dump(exclude_none=True)}))
         return configs[s.id]
@@ -214,7 +195,7 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
             s = store.get(check_session_id(sid))
             config = checked(body.config)  # also for a session that exists: a bad config is refused, not ignored
             if s is None:
-                s = started(store.create(body.topic, await agent_for(body), sid), config)
+                s = started(store.create(body.topic, body.agent, sid), config)
                 if config:
                     configs[s.id] = config
         except InputError as e:
@@ -279,23 +260,13 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, model_a
 def build() -> FastAPI:
     from orb_core import config
     from orb_core.jev import make_reader
-    from orb_core.ollama import Ollama
     from orb_discussion.agent import DiscussionAgent
 
     config.bootstrap()
     root = config.repo_root()
-    url = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
-    default_model = os.environ.get("ORB_LLM_MODEL", "gemma4:e2b")
-    reader = make_reader()
-    store = SessionStore({"discussion": DiscussionAgent(reader, Ollama(base_url=url, model=default_model))},
-                         save_dir=root / "data" / "sessions")
-
-    async def installed() -> list[str]:
-        return (await Ollama(base_url=url, model=default_model).health()).get("available") or []
-
+    store = SessionStore({"discussion": DiscussionAgent(make_reader())}, save_dir=root / "data" / "sessions")
     port = int(os.environ.get("ORB_AGENT_PORT", "8100"))
-    return create_app(store, VoiceConfig.from_env(), default_model=default_model, installed_models=installed,
-                      model_agent=lambda model: DiscussionAgent(reader, Ollama(base_url=url, model=model)),
+    return create_app(store, VoiceConfig.from_env(),
                       speech_url=os.environ.get("ORB_SPEECH_URL", "http://127.0.0.1:8200"),
                       self_url=f"http://127.0.0.1:{port}", share_key=os.environ.get("ORB_SHARE_KEY"),
                       probe=listening, worker_port=int(os.environ.get("ORB_VOICE_PORT", "8081")),
