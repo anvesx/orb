@@ -1,6 +1,6 @@
 # orb architecture
 
-Last update: 2026-11-16 (the brain packages import no voice code, decision 0016)
+Last update: 2026-11-24 (the Mac app, a channel that sends sources, decision 0020)
 
 ## The idea in one sentence
 **orb is a platform for company agents: each agent is a brain behind one interface, and channels (web, voice,
@@ -21,7 +21,7 @@ later Slack) carry turns to it.**
 
 ## Layers
 ```
- CHANNELS            web chat (browser)        voice (browser → LiveKit → voice worker)     Slack (later)
+ CHANNELS            web chat (browser)        voice (browser or the Mac app → LiveKit → voice worker)     Slack (later)
                             │                              │
                             ▼                              ▼
  AGENT SERVICE      apps/agent · one HTTP API · sessions · NDJSON events (server.py, no voice code)
@@ -133,6 +133,7 @@ packages/python/orb-speech      the speech service: Whistle or Parakeet; Kokoro,
 packages/python/orb-bench       the test audio and the scored suites
 apps/agent                      the agent service, the web chat and the bench page
 apps/voice-agent                the voice worker on LiveKit Agents
+apps/mac                        orb for Mac (Swift): the island, the call, context from files (docs/design/mac-app.md)
 docs/                           this file, the roadmap, the LLD template, decisions
 data/                           the reference chat and its Jev run (test data); sessions, logs and the bench data (not in git)
 scripts/                        dev.sh (start everything), e2e_voice.py (end-to-end voice test), stt_bench.py (decision 0005)

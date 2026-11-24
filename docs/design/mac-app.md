@@ -100,10 +100,11 @@ values live in one `Theme` type, so the tokens replace one file.
  orb.app (Swift 6, SwiftUI + AppKit, macOS 14+, LSUIElement, not sandboxed)
  ├── OrbApp      entry: wires the parts, owns the windows, the menu bar item and the shortcuts
  ├── OrbUI       design tokens, logo, orb view, island and panel, companion overlay, captions, inspector, settings
- └── OrbKit      no UI code:
+ ├── OrbVoice    LiveKitTransport: the one module that imports LiveKit (VoiceCall below)
+ └── OrbKit      no UI code, no WebRTC:
      ├── Context        the ContextProvider layer; v1 provider: files (folders, text extraction, the request budget)
      ├── AgentClient    the agent service's HTTP API (sessions, sources, config, token, status, models, state)
-     ├── VoiceCall      one LiveKit room: connect, microphone on and off, agent state, captions, bench events, levels
+     ├── VoiceTransport the interface of one call (VoiceEvent, Captions, BenchEvent, AudioLevels); OrbVoice implements it
      ├── CallMachine    the state machine of a call (pure; every transition is unit tested)
      └── AppModel       @Observable: the one model the UI reads; it runs the machine and talks to the three above
                 │ HTTP (loopback)                       │ WebRTC (LiveKit)
@@ -113,7 +114,8 @@ values live in one `Theme` type, so the tokens replace one file.
    GET  /v1/sessions/{id}/instructions  ◀────────── (now with the files' text)
 ```
 **Rules that keep it clean:**
-- `OrbKit` imports Foundation, PDFKit, AppKit's text readers and LiveKit, never SwiftUI. `OrbUI` never imports LiveKit:
+- `OrbKit` imports Foundation, PDFKit, AppKit's text readers and AVFoundation, never SwiftUI or LiveKit. `OrbUI` never
+  imports LiveKit:
   it reads `AppModel` only. A test target per module.
 - Each external thing sits behind a protocol (`AgentAPI`, `VoiceTransport`, `FileSystem`), so `AppModel` and
   `CallMachine` are tested with fakes and no network.
@@ -125,11 +127,13 @@ values live in one `Theme` type, so the tokens replace one file.
 ```
 apps/mac/
   Package.swift                    swift-tools-version 6.0; platforms macOS 14
-  Sources/OrbKit/{Library,Agent,Voice,Call,Model}/…
-  Sources/OrbUI/{Theme,Logo,Orb,Panel,Companion,Inspector,Settings}/…
-  Sources/OrbApp/OrbApp.swift, AppDelegate.swift, Windows.swift, Shortcuts.swift
-  Tests/OrbKitTests/…   Tests/OrbUITests/…   (swift-testing)
-  Resources/Info.plist, orb.entitlements
+  Sources/OrbKit/{Agent,Context,Voice,Call,Model}/…
+  Sources/OrbVoice/LiveKitTransport.swift
+  Sources/OrbUI/…                  Theme, Logo, OrbView, IslandView, PanelView, captions, context (PR 3: companion, inspector, settings)
+  Sources/OrbApp/OrbApp.swift, Shell.swift, IslandWindow.swift
+  Sources/OrbProbe/main.swift      a command-line call: the voice spike
+  Tests/OrbKitTests/…              (swift-testing)
+  Resources/Info.plist
   scripts/build_app.sh             swift build -c release → build/orb.app, icon, Info.plist, codesign
   scripts/make_icon.swift          draws the logo into an .iconset, iconutil → orb.icns
   README.md, LLD.md
@@ -228,7 +232,7 @@ of context is a new session in v1 (11.2 makes it live). The files provider:
   - PDF: PDFKit `PDFDocument.string`, page by page with a `--- page N ---` mark. A PDF without text (a scan) says so.
   - RTF and DOCX: `NSAttributedString(url:options:documentAttributes:)`, its `.string`.
   - A file that gives no text (a scanned PDF, an empty file) is marked "no text in this file" and not sent.
-- `SourcePack.make(files, focus:)`: the focused file first, then the rest newest first, each cut to the service's
+- `SourcePack.fit(sources)`: the items in the order they were added, a folder's files newest first, each cut to the service's
   per-file limit, stopping before the request limits of 5.1 (extraction stops there too, so a folder of large PDFs is
   not read in full). The panel shows "in the call" marks from the create answer (`used`, `whole`).
 
@@ -303,9 +307,9 @@ A port of the web page's `talk()`:
   with event lists.
 
 ### 6.5 AppModel
-`@MainActor @Observable final class AppModel`: `providers`, `context` (the chosen items), `focus`, `call` (the machine's state),
+`@MainActor @Observable final class AppModel`: `providers`, `context` (the chosen items), `call` (the machine's state),
 `agentState`, `captions`, `levels`, `warning`, `session` (id and the inspector's state), `settings`. The UI calls
-intents only: `add(context:)`, `remove(context:)`, `focus(item:)`, `talkDown()`, `talkUp()`, `hangUp()`,
+intents only: `add(_:)`, `remove(_:)`, `talkDown()`, `talkUp()`, `hangUp()`,
 `newSession()`. Changing the context or "New session" during a call ends it first. A call with no context is fine: orb
 is a general voice partner then.
 

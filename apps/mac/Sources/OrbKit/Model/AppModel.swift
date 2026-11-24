@@ -1,0 +1,265 @@
+import AVFoundation
+import Foundation
+import Observation
+
+/// The one model that the UI reads. It runs the call machine's effects and talks to the service, the voice
+/// transport and the context providers. The UI calls its intents only.
+@MainActor @Observable
+public final class AppModel {
+    public struct Timing: Sendable {
+        public var tail: Duration = .milliseconds(300)
+        public var agentJoin: Duration = .seconds(15)
+        public init() {}
+    }
+
+    public private(set) var call = CallState()
+    public private(set) var captions = Captions()
+    public private(set) var context: [ContextItem] = []
+    public private(set) var suggestions: [ContextItem] = []
+    public private(set) var sourceUses: [SourceUse] = []
+    public private(set) var sessionID: String?
+    public private(set) var serviceUp: Bool?
+    public private(set) var gemini: GeminiOptions?
+    public private(set) var youSpeaking = false
+    /// A problem that does not end the call (a worker error, a reply with no words).
+    public private(set) var notice: String?
+    public private(set) var events: [String] = []
+    public var settings: Settings { didSet { settings.save() } }
+
+    public let providers: [any ContextProvider]
+    public var levels: AudioLevels { transport.levels }
+    public var warning: String? { call.warning ?? notice }
+
+    let transport: VoiceTransport
+    let makeAPI: @Sendable (URL) -> AgentAPI
+    let timing: Timing
+    let microphone: @Sendable () async -> Bool
+    @ObservationIgnored var tasks: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored var micChain: Task<Void, Never>?
+
+    public init(transport: VoiceTransport, providers: [any ContextProvider], settings: Settings = .load(),
+                timing: Timing = Timing(), microphone: @escaping @Sendable () async -> Bool = AppModel.askMicrophone,
+                makeAPI: @escaping @Sendable (URL) -> AgentAPI = { AgentClient(base: $0) }) {
+        self.transport = transport
+        self.providers = providers
+        self.settings = settings
+        self.timing = timing
+        self.makeAPI = makeAPI
+        self.microphone = microphone
+    }
+
+    var api: AgentAPI { makeAPI(URL(string: settings.serviceURL) ?? URL(string: "http://127.0.0.1:8100")!) }
+
+    // MARK: - Intents
+
+    public func talkDown() { send(.talkDown) }
+    public func talkUp() { send(.talkUp) }
+    public func hangUp() { send(.hangUp) }
+    public func newSession() { send(.newSession) }
+
+    public func add(_ item: ContextItem) {
+        guard !context.contains(item) else { return }
+        send(.newSession)
+        context.append(item)
+    }
+
+    public func remove(_ item: ContextItem) {
+        send(.newSession)
+        context.removeAll { $0 == item }
+    }
+
+    /// Is the service up, and which Gemini options does it have. Also refreshes the context suggestions.
+    public func refresh() {
+        tasks["refresh"]?.cancel()
+        tasks["refresh"] = Task {
+            let api = self.api
+            serviceUp = (try? await api.health()) ?? false
+            gemini = try? await api.gemini()
+        }
+        tasks["suggestions"]?.cancel()
+        tasks["suggestions"] = Task {  // the first Desktop listing can wait on macOS's permission prompt
+            var found: [ContextItem] = []
+            for p in providers { found += await p.suggestions() }
+            suggestions = found
+        }
+    }
+
+    // MARK: - The machine
+
+    public func send(_ event: CallEvent) {
+        let (next, effects) = CallMachine.reduce(call, event)
+        call = next
+        effects.forEach(run)
+    }
+
+    func run(_ effect: CallEffect) {
+        switch effect {
+        case .prepare:
+            notice = nil
+            captions = Captions()
+            tasks["prepare"] = Task { await prepare() }
+        case .cancelPrepare:
+            cancel("prepare")
+        case .connect(let token):
+            tasks["call"] = Task { await connect(token) }
+        case .disconnect:
+            ["call", "tail", "join", "idle"].forEach(cancel)
+            youSpeaking = false
+            Task { await transport.disconnect() }
+        case .setMic(let on):
+            micChain = Task { [previous = micChain, transport] in
+                await previous?.value
+                try? await transport.setMicrophone(on)
+            }
+        case .startTail:
+            after("tail", timing.tail) { $0.send(.tailElapsed) }
+        case .startAgentJoinTimer:
+            after("join", timing.agentJoin) { $0.send(.agentJoinTimeout) }
+        case .cancelAgentJoinTimer:
+            cancel("join")
+        case .restartIdleTimer:
+            after("idle", .seconds(settings.idleMinutes * 60)) { $0.send(.idleTimeout) }
+        case .forgetSession:
+            sessionID = nil
+            sourceUses = []
+        }
+    }
+
+    func after(_ name: String, _ delay: Duration, _ then: @escaping @MainActor (AppModel) -> Void) {
+        tasks[name]?.cancel()
+        tasks[name] = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self else { return }
+            then(self)
+        }
+    }
+
+    func cancel(_ name: String) {
+        tasks[name]?.cancel()
+        tasks[name] = nil
+    }
+
+    // MARK: - Effects
+
+    func prepare() async {
+        guard await microphone() else { return send(.micDenied) }
+        do {
+            let api = self.api
+            if let block = try await voiceBlock(api) { return send(.prepareFailed(block)) }
+            let sid = try await session(api)
+            let token = try await api.token(session: sid)
+            try Task.checkCancellation()
+            send(.prepared(token))
+        } catch is CancellationError {
+        } catch {
+            if (error as? AgentError)?.status == 0 { serviceUp = false }
+            send(.prepareFailed(error.localizedDescription))
+        }
+    }
+
+    /// Why a call cannot start, as the web page says it, or nil.
+    func voiceBlock(_ api: AgentAPI) async throws -> String? {
+        guard let status = try await api.voiceStatus() else {
+            return "Voice is off: the orb service has no LiveKit settings (LIVEKIT_URL and its keys)."
+        }
+        serviceUp = true
+        if status.livekit == false { return "The voice server (LiveKit) is not running. Start it with make dev-gemini." }
+        if status.worker == false { return "The voice worker is not running. Start it with make dev-gemini." }
+        if (try? await api.gemini())?.available == false {
+            return "Gemini Live needs GOOGLE_API_KEY in the orb repo's .env. Set it and restart make dev-gemini."
+        }
+        return nil
+    }
+
+    /// The session of this context: the current one with the current config, or a new one with the sources.
+    /// A 404 means the service restarted and forgot it, so a new one gets the sources again.
+    func session(_ api: AgentAPI) async throws -> String {
+        if let sid = sessionID {
+            do {
+                try await api.saveConfig(session: sid, config: settings.config)
+                return sid
+            } catch let e as AgentError where e.isMissingSession {
+                sessionID = nil
+            }
+        }
+        var sources: [Source] = []
+        for p in providers {
+            let items = context.filter { $0.provider == p.id }
+            if !items.isEmpty { sources += await p.sources(for: items) }
+        }
+        let topic = context.isEmpty ? "Open discussion" : context.map(\.title).joined(separator: ", ")
+        let info = try await api.createSession(topic: String(topic.prefix(200)), config: settings.config,
+                                               sources: SourcePack.fit(sources))
+        sessionID = info.id
+        sourceUses = info.sources
+        return info.id
+    }
+
+    func connect(_ token: VoiceToken) async {
+        let stream: AsyncStream<VoiceEvent>
+        do {
+            stream = try await transport.connect(url: token.url, token: token.token)
+        } catch {
+            return send(.connectFailed(Self.explain(error, url: token.url)))
+        }
+        guard !Task.isCancelled else { return }
+        send(.joined)
+        for await event in stream { handle(event) }
+        send(.disconnected(nil))
+    }
+
+    func handle(_ event: VoiceEvent) {
+        switch event {
+        case .agentJoined: send(.agentJoined)
+        case .agentState(let a): send(.agentState(a))
+        case .youSpeaking(let on):
+            youSpeaking = on
+            if on { send(.youSpeaking) }
+        case .yourWords(let segment, let text, let final):
+            captions.yourWords(segment: segment, text: text, final: final)
+        case .orbWords(let segment, let chunk):
+            captions.orbWords(segment: segment, chunk: chunk)
+        case .bench(let e):
+            bench(e)
+        case .reconnecting: send(.reconnecting)
+        case .reconnected: send(.reconnected)
+        case .disconnected(let why): send(.disconnected(why))
+        }
+    }
+
+    func bench(_ e: BenchEvent) {
+        log(e.summary)
+        switch e.type {
+        case "polished":
+            if e["applied"]?.bool == true, let heard = e["heard"]?.string, let text = e["text"]?.string {
+                captions.polished(heard: heard, text: text)
+            }
+        case "error", "stt_error":
+            notice = e["error"]?.string
+        case "agent_reply":
+            notice = e["chars"]?.number == 0 ? "orb wrote no words for this turn. Say it again." : nil
+        default: break
+        }
+    }
+
+    func log(_ line: String) {
+        events.insert(Date.now.formatted(date: .omitted, time: .standard) + "  " + line, at: 0)
+        if events.count > 200 { events.removeLast() }
+    }
+
+    public nonisolated static func askMicrophone() async -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized: true
+        case .notDetermined: await AVCaptureDevice.requestAccess(for: .audio)
+        default: false
+        }
+    }
+
+    static func explain(_ error: Error, url: String) -> String {
+        let text = error.localizedDescription
+        if text.lowercased().contains("pc connection") || text.lowercased().contains("peer connection") {
+            return "The voice signal works, but the audio could not reach the computer that runs orb."
+        }
+        return "Voice did not start: \(text). The voice server is \(url); check that it and the voice worker run."
+    }
+}
