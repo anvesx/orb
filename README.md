@@ -51,6 +51,7 @@ make setup      # Homebrew (LiveKit, Ollama, ffmpeg), the `orb` conda env, the s
 make test       # 189 tests, no network, no API cost
 make dev        # every service; open http://127.0.0.1:8100: the voice call (an orb) and the bench tools are tabs of one page
 make dev-gemini # Gemini Live only: LiveKit, the agent service and the voice worker, no local models
+make mac-run    # build and open orb for Mac (apps/mac); talk with ⌥ Space while make dev-gemini runs
 make e2e        # in a second terminal: a synthetic person talks to the voice agent
 make check      # start every service, test them (unit, live and voice end to end), and stop them: about 4 minutes
 make bench      # the git-ignored test audio for the bench (once)
