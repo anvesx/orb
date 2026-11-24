@@ -1,7 +1,7 @@
-"""The screen tools of a Gemini Live call (docs/design/mac-screen.md): Gemini reads and points at the person's screen.
+"""The screen tools of a Gemini Live call (docs/design/screen-canvas.md): Gemini reads the person's screen and marks it.
 
 The worker never touches the screen: each tool is an RPC to the person's app in the room, which reads the screen
-(OCR, Accessibility) or moves its companion there, and answers JSON. A failure becomes a short sentence that Gemini
+(OCR, Accessibility) or finds the target and draws on it, and answers JSON. A failure becomes a short sentence that Gemini
 can say, never an exception that would end its turn.
 """
 from __future__ import annotations
@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import logging
 import time
+import uuid
+from typing import Literal
 
 from livekit import rtc
 from livekit.agents import function_tool
@@ -16,8 +18,10 @@ from livekit.agents import function_tool
 log = logging.getLogger("orb.voice")
 
 READ = "orb.screen.read"
-SHOW = "orb.screen.show"
-TIMEOUT = 8.0  # OCR of a full display takes 0.5 to 1.5 s; a slow first one must not fail the turn
+CANVAS = "orb.canvas"
+Kind = Literal["text", "ui", "visual"]
+Style = Literal["underline", "box", "marker", "circle"]
+TIMEOUT = 6.0  # the app's own budgets end first (sight 3.5 s); this only catches an app that is gone
 NOT_SHARED = "The person's screen is not shared in this call: no orb app is in the room."
 
 
@@ -63,33 +67,30 @@ class ScreenTools:
             summarise words, numbers or code on the screen."""
             return await self.call(READ, {})
 
-        @function_tool(name="highlight_text")
-        async def highlight_text(text: str, note: str = "") -> str:
-            """Highlight words on the person's screen and move orb's pointer to them, while you talk about them.
+        @function_tool(name="mark")
+        async def mark(target: str, kind: Kind, style: Style = "underline", note: str = "") -> str:
+            """Draw on the person's screen by hand, as a teacher would with a pen, while you talk about it. orb finds
+            the target itself: never give coordinates.
 
             Args:
-                text: a few words exactly as they appear on the screen, from one passage (3 to 12 words is best).
-                note: a very short label shown next to the highlight, or empty.
+                target: for kind "text", the words copied exactly from read_screen (3 to 12 words of one passage);
+                    otherwise a short description of the thing ("the blue robot", "the Export button").
+                kind: "text" for words on the screen, "ui" for a button, menu, field or tab, "visual" for a picture,
+                    an icon or a part of a figure.
+                style: "underline" for a phrase, "box" for a number, a name or a short block, "marker" for a sentence
+                    to read, "circle" for a thing or a picture.
+                note: a very short label shown next to the mark, or empty.
             """
-            return await self.call(SHOW, {"text": text, "label": note})
+            return await self.call(CANVAS, canvas_op("mark", target=target, kind=kind, style=style, note=note))
 
-        @function_tool(name="point_at")
-        async def point_at(near_text: str, label: str = "", x: int = -1, y: int = -1) -> str:
-            """Move orb's pointer to something on the screen that is not a passage: a button, an icon, a menu, a part
-            of a picture. Your sense of positions on the screen is rough, so point by text when you can.
+        @function_tool(name="clear_marks")
+        async def clear_marks() -> str:
+            """Remove every mark orb drew on the screen."""
+            return await self.call(CANVAS, canvas_op("clear"))
 
-            Args:
-                near_text: the visible text on or right next to the thing, exactly as on screen: a button's title, an
-                    icon's label, the caption under a picture (for a figure of a robot captioned "Reasoner Agent",
-                    "Reasoner Agent"). Empty only when no text is near; then give x and y.
-                label: a very short label shown next to the pointer, or empty.
-                x: only when no text is near: 0 (left edge) to 1000 (right edge) of the screen you see.
-                y: only when no text is near: 0 (top edge) to 1000 (bottom edge) of the screen you see.
-            """
-            if near_text.strip():
-                return await self.call(SHOW, {"text": near_text, "label": label, "point": True})
-            if x < 0 or y < 0:
-                return json.dumps({"error": "Give near_text, or x and y."})
-            return await self.call(SHOW, {"x": min(1000, x), "y": min(1000, y), "label": label})
+        return [read_screen, mark, clear_marks]
 
-        return [read_screen, highlight_text, point_at]
+
+def canvas_op(op: str, **fields) -> dict:
+    """An op of the canvas wire format (contracts/canvas-ops.json); the id makes a retried call draw once."""
+    return {"v": 1, "op": op, "opId": uuid.uuid4().hex[:8], **fields}

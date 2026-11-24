@@ -2,11 +2,15 @@
 sentences for Gemini. No room connects."""
 import asyncio
 import json
+from pathlib import Path
+from typing import get_args
 
 from livekit import rtc
 
 from orb_voice import screen_tools
 from orb_voice.screen_tools import ScreenTools
+
+CONTRACT = json.loads((Path(__file__).parents[3] / "contracts" / "canvas-ops.json").read_text())
 
 
 class Participant:
@@ -41,9 +45,9 @@ def run(coro):
     return asyncio.run(coro)
 
 
-def test_the_three_tools_are_gemini_function_tools():
+def test_the_tools_are_gemini_function_tools():
     tools = ScreenTools(Room(Local()), "s1")
-    assert [t.id for t in tools.tools()] == ["read_screen", "highlight_text", "point_at"]
+    assert [t.id for t in tools.tools()] == ["read_screen", "mark", "clear_marks"]
 
 
 def test_read_screen_asks_the_app_and_returns_its_answer():
@@ -53,16 +57,24 @@ def test_read_screen_asks_the_app_and_returns_its_answer():
     assert local.calls == [("mac-7", screen_tools.READ, {}, screen_tools.TIMEOUT)]  # the app, never the agent
 
 
-def test_highlight_and_point_send_a_show_request():
+def test_mark_and_clear_send_ops_of_the_wire_format():
     local = Local(answer='{"found": true}')
     tools = ScreenTools(Room(local), "s1")
-    run(tool(tools, "highlight_text")(text="three dates", note="dates"))
-    run(tool(tools, "point_at")(near_text="Export", label="here"))
-    run(tool(tools, "point_at")(near_text="", x=1400, y=0, label="Zoom"))
-    assert json.loads(run(tool(tools, "point_at")(near_text=" ", label="lost"))) == {"error": "Give near_text, or x and y."}
-    assert [c[1:3] for c in local.calls] == [(screen_tools.SHOW, {"text": "three dates", "label": "dates"}),
-                                             (screen_tools.SHOW, {"text": "Export", "label": "here", "point": True}),
-                                             (screen_tools.SHOW, {"x": 1000, "y": 0, "label": "Zoom"})]
+    run(tool(tools, "mark")(target="2 Related Work", kind="text", style="box", note="section"))
+    run(tool(tools, "clear_marks")())
+    sent = [c[2] for c in local.calls]
+    assert {c[1] for c in local.calls} == {screen_tools.CANVAS}
+    fixture = CONTRACT["ops"]
+    assert [{k: v for k, v in op.items() if k != "opId"} for op in sent] == \
+        [{k: v for k, v in fixture[i].items() if k != "opId"} for i in (0, 3)]
+    assert len({op["opId"] for op in sent}) == 2  # each op its own id: a retry draws once
+
+
+def test_the_contract_fixture_has_the_shapes_the_tools_send():
+    for op in CONTRACT["ops"]:
+        assert set(op) <= {"v", "op", "opId", "target", "kind", "style", "note"} and op["v"] == 1
+        if op["op"] == "mark":
+            assert op["kind"] in get_args(screen_tools.Kind) and op["style"] in get_args(screen_tools.Style)
 
 
 def test_no_app_in_the_room_is_a_sentence_not_an_error():

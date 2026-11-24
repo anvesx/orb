@@ -1,0 +1,14 @@
+{
+  "ops": [
+    {"v": 1, "op": "mark", "opId": "a1", "target": "2 Related Work", "kind": "text", "style": "box", "note": "section"},
+    {"v": 1, "op": "mark", "opId": "a2", "target": "the blue robot", "kind": "visual", "style": "circle", "note": ""},
+    {"v": 1, "op": "mark", "opId": "a3", "target": "the Export button", "kind": "ui", "style": "underline", "note": "here"},
+    {"v": 1, "op": "clear", "opId": "a4"}
+  ],
+  "answers": [
+    {"found": true, "id": "a1", "by": "text", "matches": 1},
+    {"found": true, "id": "a2", "by": "sight", "matches": 1, "confidence": 0.9},
+    {"found": false, "why": "Nothing like \"the Export button\" is on the screen."},
+    {"cleared": 2}
+  ]
+}
