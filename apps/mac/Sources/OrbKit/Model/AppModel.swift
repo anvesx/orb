@@ -31,6 +31,8 @@ public final class AppModel {
     public var settings: Settings { didSet { settings.save() } }
     /// How the talk shortcut reads, for the hints (the app sets it).
     public var talkShortcut = "⌥ Space"
+    /// Why the double tap of ⌥ cannot work, or nil (the app sets it: it needs the Accessibility permission).
+    public var doubleTapBlocked: String?
 
     public let providers: [any ContextProvider]
     public var levels: AudioLevels { transport.levels }
@@ -61,6 +63,7 @@ public final class AppModel {
     public func talkDown() { send(.talkDown) }
     public func talkUp() { send(.talkUp) }
     public func hangUp() { send(.hangUp) }
+    public func toggleHandsFree() { send(.toggleHandsFree) }
     public func newSession() { send(.newSession) }
 
     public func add(_ item: ContextItem) {

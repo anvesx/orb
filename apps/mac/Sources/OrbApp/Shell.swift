@@ -18,6 +18,7 @@ final class Shell {
     let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     let files = FilesProvider()
     var companion: CompanionOverlay?
+    var optionTap: OptionTap?
     var windows: [String: NSWindow] = [:]
 
     init() {
@@ -29,6 +30,7 @@ final class Shell {
             openInspector: { [weak self] in self?.showInspector() })))
         model.talkShortcut = Self.label(KeyboardShortcuts.getShortcut(for: .talk))
         companion = CompanionOverlay(model: model)
+        optionTap = OptionTap(model: model)
         setUpStatusItem()
         KeyboardShortcuts.onKeyDown(for: .talk) { [weak self] in self?.model.talkDown() }
         KeyboardShortcuts.onKeyUp(for: .talk) { [weak self] in self?.model.talkUp() }
