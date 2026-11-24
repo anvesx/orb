@@ -15,7 +15,7 @@ BRAIN_AND_PAGE = {
     "GET /v1/models", "GET /v1/sessions", "POST /v1/sessions", "GET /v1/sessions/{sid}", "PUT /v1/sessions/{sid}",
     "PUT /v1/sessions/{sid}/config", "POST /v1/sessions/{sid}/turns", "POST /v1/sessions/{sid}/notes",
     "POST /v1/sessions/{sid}/replies",
-    "GET /v1/sessions/{sid}/instructions", "GET /v1/voice/status", "POST /v1/voice/token",
+    "GET /v1/sessions/{sid}/instructions", "GET /v1/voice/status", "POST /v1/voice/token", "POST /v1/ground",
 }
 LIVEKIT_PROXY = {"APIWebSocketRoute /rtc", "APIWebSocketRoute /rtc/{rest:path}", "GET /rtc/{rest:path}"}
 BENCH = {
