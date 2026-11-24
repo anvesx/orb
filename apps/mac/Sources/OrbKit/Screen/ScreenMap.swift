@@ -15,6 +15,22 @@ public enum ScreenMap {
         return CGPoint(x: display.minX + fx * display.width, y: display.maxY - fy * display.height)
     }
 
+    /// The rects of one passage only: from the first, each next line must sit just below the one before it and share
+    /// part of its width. OCR's reading order puts a line of the right column after the same line of the left one, so a
+    /// quote that runs on can reach the other column; that part is dropped. Rects are in AppKit points (y up).
+    public static func passage(_ rects: [CGRect]) -> [CGRect] {
+        guard var last = rects.first else { return [] }
+        var out = [last]
+        for r in rects.dropFirst() {
+            let below = r.maxY <= last.midY && last.minY - r.maxY <= 1.5 * max(last.height, r.height)
+            let overlaps = r.minX < last.maxX && r.maxX > last.minX
+            guard below && overlaps else { break }
+            out.append(r)
+            last = r
+        }
+        return out
+    }
+
     /// Where the companion stands for a highlight: at the left end of the first line, a little below it.
     public static func anchor(of rects: [CGRect]) -> CGPoint? {
         guard let first = rects.first else { return nil }

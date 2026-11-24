@@ -48,6 +48,15 @@ import Testing
         #expect(ScreenMap.point(x: 2000, y: -9, display: main) == CGPoint(x: 1512, y: 982))
     }
 
+    @Test func aHighlightStaysInOneColumn() {
+        let left1 = CGRect(x: 100, y: 500, width: 400, height: 14), left2 = CGRect(x: 100, y: 484, width: 380, height: 14)
+        let right = CGRect(x: 700, y: 500, width: 60, height: 14)  // the same height, the other column
+        #expect(ScreenMap.passage([left1, left2]) == [left1, left2])
+        #expect(ScreenMap.passage([left1, right, left2]) == [left1])
+        #expect(ScreenMap.passage([left1, CGRect(x: 100, y: 300, width: 400, height: 14)]) == [left1])  // far below
+        #expect(ScreenMap.passage([]).isEmpty)
+    }
+
     @Test func theDisplayUnderThePointerOrTheNearest() {
         #expect(ScreenChoice.display(pointer: CGPoint(x: -10, y: 10), displays: [main, left]) == 1)
         #expect(ScreenChoice.display(pointer: CGPoint(x: 700, y: 990), displays: [main, left]) == 0)

@@ -28,6 +28,7 @@ public enum ScreenRPC {
         var x: Int?
         var y: Int?
         var label: String?
+        var point: Bool?
     }
 
     public static func answerRead(_ screen: ScreenService) async -> (answer: String, reading: ScreenReading) {
@@ -43,6 +44,9 @@ public enum ScreenRPC {
         if let text = show.text, !text.trimmingCharacters(in: .whitespaces).isEmpty {
             guard let rects = await screen.locate(text), let anchor = ScreenMap.anchor(of: rects) else {
                 return (#"{"found":false,"why":"Those words are not on the screen. Quote them exactly as they appear."}"#, nil)
+            }
+            if show.point == true {  // a button or a caption: the companion goes there, nothing is highlighted
+                return (#"{"found":true}"#, PointTarget(point: CGPoint(x: rects[0].midX, y: rects[0].minY), label: label))
             }
             return (#"{"found":true}"#, PointTarget(point: anchor, rects: rects, label: label))
         }

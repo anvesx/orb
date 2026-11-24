@@ -107,6 +107,13 @@ rpath to `Contents/Frameworks`), the SwiftPM resource bundles, `Info.plist` and 
 then signs the frameworks and the app. SwiftPM's resource accessor looks for bundles next to the app, not in
 `Contents/Resources`; only KeyboardShortcuts' recorder strings use one, so the app does not use its recorder view.
 
+## Live tests without a person
+`ORB_TEST_VOICE=<folder>` (for example `open --env ORB_TEST_VOICE=/tmp/voice-in build/orb.app`) installs `TestVoice`,
+a LiveKit `capturePostProcessingDelegate`: each audio file put in the folder replaces the microphone's samples after
+echo cancellation, so Gemini hears it exactly as it hears a person. `say -o q.wav --data-format=LEI16@24000 "…"`
+writes one. Playing it through the speakers does not work: echo cancellation removes what the Mac itself plays.
+With `ORB_LOG_TEXT=1` the worker logs each screen tool's payload and answer.
+
 ## Tests (`swift test`)
 | Suite | Covers |
 |---|---|

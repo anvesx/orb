@@ -26,6 +26,8 @@ actor MacScreen: ScreenService {
     var content: (SCShareableContent, Date)?
     var shared: Display?
     var seen: Seen?
+    /// The last document read, by its file and its modification date: a question after a question reads it once.
+    var document: (url: URL, date: Date?, reading: ScreenReading.Document)?
 
     func allowed(ask: Bool) async -> Bool {
         if CGPreflightScreenCaptureAccess() { return true }
@@ -38,6 +40,7 @@ actor MacScreen: ScreenService {
         feeding?.cancel()
         feeding = nil
         guard let sink else { return }
+        Task { await warmUp() }
         feeding = Task {
             while !Task.isCancelled {
                 do {
@@ -53,20 +56,40 @@ actor MacScreen: ScreenService {
     }
 
     func read() async -> ScreenReading {
-        var (r, document) = await MainActor.run { Self.frontApp() }
-        if let document, let source = Extractor.source(of: document) {  // off the main thread: a PDF can take a while
-            r.document = .init(name: source.name, kind: source.kind.rawValue, text: source.text)
-        }
-        do {
-            let seen = try await look()
+        let t0 = Date.now
+        async let text = try? look()  // OCR and the document at once: Gemini waits in silence for the answer
+        var (r, url) = await MainActor.run { Self.frontApp() }
+        if let url { r.document = documentText(url) }
+        if let seen = await text {
             r.screenText = seen.lines.map(\.string).joined(separator: "\n")
-        } catch {
+        } else {
             r.note = "The screen's text is missing: orb has no Screen Recording permission, or the capture failed."
         }
+        log.debug("read in \(Int(Date.now.timeIntervalSince(t0) * 1000)) ms")
         if r.app != nil && r.window == nil && !AXIsProcessTrusted() {
             r.note = (r.note.map { $0 + " " } ?? "") + "No window, selection or document: orb has no Accessibility permission."
         }
         return r
+    }
+
+    func documentText(_ url: URL) -> ScreenReading.Document? {
+        let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        if let d = document, d.url == url, d.date == date { return d.reading }
+        guard let source = Extractor.source(of: url) else { return nil }
+        let reading = ScreenReading.Document(name: source.name, kind: source.kind.rawValue, text: source.text)
+        document = (url, date, reading)
+        return reading
+    }
+
+    /// Loads Vision's text model before the first question: the first recognition of a session is about a second slower.
+    func warmUp() async {
+        let image = CGImage(width: 8, height: 8, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: 32,
+                            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                            provider: CGDataProvider(data: Data(count: 256) as CFData)!, decode: nil, shouldInterpolate: false,
+                            intent: .defaultIntent)
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        if let image { try? VNImageRequestHandler(cgImage: image).perform([request]) }
     }
 
     func locate(_ text: String) async -> [CGRect]? {
@@ -80,7 +103,8 @@ actor MacScreen: ScreenService {
             guard let box = try? seen.lines[span.line].boundingBox(for: range)?.boundingBox else { return nil }
             return ScreenMap.rect(vision: box, display: seen.display.frame)
         }
-        return rects.isEmpty ? nil : rects
+        let passage = ScreenMap.passage(rects)
+        return passage.isEmpty ? nil : passage
     }
 
     func spot(x: Int, y: Int) async -> CGPoint? {

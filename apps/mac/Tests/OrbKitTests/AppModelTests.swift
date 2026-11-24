@@ -120,6 +120,8 @@ func waitFor(_ ok: () -> Bool) async {
         let shown = await transport.served[ScreenRPC.show]!(#"{"text":"third of march","label":"date"}"#)
         #expect(shown == #"{"found":true}"#)
         #expect(m.pointer?.rects.count == 2 && m.pointer?.label == "date")
+        _ = await transport.served[ScreenRPC.show]!(#"{"text":"Pricing","point":true,"label":"here"}"#)
+        #expect(m.pointer?.rects.isEmpty == true && m.pointer?.point == CGPoint(x: 3.5, y: 100))
         let missed = await transport.served[ScreenRPC.show]!(#"{"text":"refund policy"}"#)
         #expect(missed.contains("\"found\":false"))
         m.hangUp()

@@ -17,7 +17,9 @@ public actor LiveKitTransport: VoiceTransport {
     /// turn detection (700 ms of silence, gemini_live.py) would wait for an end of the turn that never comes.
     static let endOfTurnSilence: Duration = .milliseconds(1200)
 
-    public init() {}
+    public init() {
+        TestVoice.install()
+    }
 
     public func connect(url: String, token: String) async throws -> AsyncStream<VoiceEvent> {
         await disconnect()
