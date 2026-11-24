@@ -18,12 +18,21 @@ live. Hold to talk: key down opens the microphone; key up starts a 300 ms tail. 
 opens the microphone at the join only if the key is still held. The call ends after `idleMinutes` (3) with no speech,
 on hang up, on a new session or a change of context, or when the room disconnects.
 
-**Hands-free:** `toggleHandsFree` (a double tap of ⌥, or the panel's button) starts a call with the microphone open
+**Hands-free:** `toggleHandsFree` (a double tap of ⌥) starts a call with the microphone open
 and no key held, or opens and closes the microphone of a live call. The key's release does not close a hands-free
 microphone; the model's turn detection ends each turn. A silent hands-free call ends after the idle timeout too.
 `DoubleTap` (pure) counts two taps of ⌥ alone, each 0.3 s or shorter, the second within 0.4 s, with no other key
 between; `OptionTap` (the app) feeds it from global and local `flagsChanged`/`keyDown` monitors, which macOS delivers
 only with the Accessibility permission (asked once; until then the panel says why).
+
+**The end of a turn:** a muted track sends no audio, so Gemini's turn detection (700 ms of silence) would wait for
+ever after a release. `LiveKitTransport.setMicrophone(false)` first sets the voice-processing input to zeros
+(`AudioManager.isMicrophoneMuted`) for 1.2 s, so the model sees silence and answers, then mutes the track.
+Measured 2026-11-24 with a synthetic ⌥ Space hold released at the last word: orb began to speak 1.9 s after the
+release (before: no answer).
+
+**Logging:** `Logger` subsystem `ai.anvesx.orb` (categories `call` and `keys`): every event with the phase, the mic and
+the effects; your words only as private. `log stream --level debug --predicate 'subsystem == "ai.anvesx.orb"'`.
 
 **Mood:** "listening" only while the microphone is open; a live call with a closed microphone is "ready", whatever
 the agent's own state says.

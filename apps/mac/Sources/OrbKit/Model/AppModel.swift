@@ -1,6 +1,9 @@
 import AVFoundation
 import Foundation
 import Observation
+import os
+
+let trace = Logger(subsystem: "ai.anvesx.orb", category: "call")
 
 /// The one model that the UI reads. It runs the call machine's effects and talks to the service, the voice
 /// transport and the context providers. The UI calls its intents only.
@@ -121,6 +124,7 @@ public final class AppModel {
 
     public func send(_ event: CallEvent) {
         let (next, effects) = CallMachine.reduce(call, event)
+        trace.debug("event \(String(describing: event), privacy: .public) -> \(String(describing: next.phase), privacy: .public) mic \(next.micOn) hands-free \(next.handsFree) effects \(String(describing: effects), privacy: .public)")
         call = next
         effects.forEach(run)
     }
@@ -250,8 +254,10 @@ public final class AppModel {
             youSpeaking = on
             if on { send(.youSpeaking) }
         case .yourWords(let segment, let text, let final):
+            trace.debug("you said (\(final ? "final" : "interim", privacy: .public)): \(text, privacy: .private)")
             captions.yourWords(segment: segment, text: text, final: final)
         case .orbWords(let segment, let chunk):
+            if segment != captions.orbSegment { trace.debug("orb starts a reply") }
             captions.orbWords(segment: segment, chunk: chunk)
         case .bench(let e):
             bench(e)

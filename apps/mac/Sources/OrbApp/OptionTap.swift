@@ -1,6 +1,9 @@
 import AppKit
 @preconcurrency import ApplicationServices
 import OrbKit
+import os
+
+private let log = Logger(subsystem: "ai.anvesx.orb", category: "keys")
 
 /// Watches for a double tap of ⌥ anywhere and toggles hands-free. macOS shows a lone modifier key to an app only when
 /// it has the Accessibility permission, so it asks once and waits until it is given.
@@ -49,7 +52,10 @@ final class OptionTap {
             detector.modifierDown(at: time)
         } else if flags.isEmpty, optionDown {
             optionDown = false
-            if detector.modifierUp(at: time) { model.toggleHandsFree() }
+            if detector.modifierUp(at: time) {
+                log.debug("double tap of the option key")
+                model.toggleHandsFree()
+            }
         } else {  // another modifier with ⌥, or alone
             optionDown = false
             detector.otherKey()

@@ -4,7 +4,7 @@ public struct Captions: Equatable, Sendable {
     public var youFinal = true
     public var orb = ""
     var youSegment = ""
-    var orbSegment = ""
+    public internal(set) var orbSegment = ""
 
     public init() {}
 
