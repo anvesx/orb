@@ -20,7 +20,8 @@ enum ScreenVision {
         request.usesLanguageCorrection = true
         request.automaticallyDetectsLanguage = true
         try VNImageRequestHandler(ciImage: image).perform([request])
-        let lines = readingOrder(request.results ?? []).compactMap { $0.topCandidates(1).first }
+        let found = request.results ?? []
+        let lines = ReadingOrder.indices(of: found.map(\.boundingBox)).compactMap { found[$0].topCandidates(1).first }
         return Seen(frame: frame, lines: lines, image: image)
     }
 
@@ -40,14 +41,5 @@ enum ScreenVision {
         request.recognitionLevel = .accurate
         try? VNImageRequestHandler(ciImage: CIImage(color: .white).cropped(to: CGRect(x: 0, y: 0, width: 16, height: 16)))
             .perform([request])
-    }
-
-    /// Top to bottom, then left to right within half a line.
-    static func readingOrder(_ o: [VNRecognizedTextObservation]) -> [VNRecognizedTextObservation] {
-        o.sorted { a, b in
-            let band = min(a.boundingBox.height, b.boundingBox.height) / 2
-            if abs(a.boundingBox.midY - b.boundingBox.midY) > band { return a.boundingBox.midY > b.boundingBox.midY }
-            return a.boundingBox.minX < b.boundingBox.minX
-        }
     }
 }

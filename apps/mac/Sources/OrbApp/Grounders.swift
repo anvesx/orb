@@ -59,13 +59,13 @@ struct SightGrounder: Grounder {
     static let longest: CGFloat = 1280
 
     let source = GroundSource.sight
-    let budget = Duration.milliseconds(3500)
+    let budget = Duration.seconds(6)
     let api: AgentAPI
     let frame: ScreenFrame
 
     func candidates(_ target: Target, in frame: Frame) async throws -> [Candidate] {
         guard let jpeg = Self.jpeg(self.frame.pixels) else { return [] }
-        let boxes = try await api.ground(image: jpeg, query: target.what)
+        let boxes = try await api.ground(image: jpeg, query: target.what, strict: target.kind == .ui)
         return boxes.enumerated().compactMap { i, b in
             ScreenMap.rect(box2d: b.box, display: frame.bounds).map {
                 Candidate(rects: [$0], score: 1 - 0.2 * Double(i), confidence: b.confidence)

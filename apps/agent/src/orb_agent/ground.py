@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import io
 import json
 import os
 import re
@@ -19,18 +20,23 @@ from pydantic import BaseModel, Field
 from orb_core import gemini
 
 Locate = Callable[[bytes, str], Awaitable[str]]
+Confirm = Callable[[bytes, str], Awaitable[bool]]
 
 MODEL = "gemini-3.5-flash-lite"
 MAX_IMAGE = 2_000_000
 MAX_SHARE = 0.6  # a box over most of the screen is not "the thing"
+SURE = 0.9  # an answer below this is checked on its crop
+MARGIN = 0.15
 PROMPT = ('Find on this screenshot: "{query}". Answer only JSON, a list of {{"found": true, "box_2d": [ymin, xmin, '
           'ymax, xmax], "label": "...", "confidence": 0.0 to 1.0}} with coordinates 0 to 1000, the best match first. '
           'An empty list when it is not on the screenshot: never box something else instead.')
+CHECK = 'Is this picture "{query}" (or does it show it)? Answer only JSON: {{"yes": true}} or {{"yes": false}}.'
 
 
 class GroundIn(BaseModel):
     image: str
     query: str = Field(min_length=1, max_length=200)
+    strict: bool = False  # check every answer: a control that Accessibility did not find may not be there
 
 
 def parse(raw: str) -> list[dict]:
@@ -58,8 +64,23 @@ def checked(item: dict) -> dict | None:
             "confidence": min(max(float(confidence), 0.0), 1.0) if isinstance(confidence, (int, float)) else None}
 
 
-def gemini_locator(model: str | None = None) -> Locate | None:
-    """The real model, or None without a key."""
+def crop(image: bytes, box: list[int]) -> bytes:
+    """The box of a JPEG frame and a margin around it, as a JPEG."""
+    from PIL import Image
+
+    img = Image.open(io.BytesIO(image))
+    w, h = img.size
+    y0, x0, y1, x1 = box
+    my, mx = (y1 - y0) * MARGIN, (x1 - x0) * MARGIN
+    area = (max(0, int((x0 - mx) * w / 1000)), max(0, int((y0 - my) * h / 1000)),
+            min(w, round((x1 + mx) * w / 1000)), min(h, round((y1 + my) * h / 1000)))
+    out = io.BytesIO()
+    img.crop(area).convert("RGB").save(out, "JPEG", quality=85)
+    return out.getvalue()
+
+
+def gemini_model(model: str | None = None) -> tuple[Locate, Confirm] | None:
+    """The real model's two questions (where is it, and is this it), or None without a key."""
     if not gemini.available():
         return None
     from google import genai
@@ -69,16 +90,24 @@ def gemini_locator(model: str | None = None) -> Locate | None:
     name = model or os.environ.get("ORB_GROUND_MODEL", MODEL)
     config = types.GenerateContentConfig(response_mime_type="application/json", temperature=0)
 
-    async def locate(image: bytes, query: str) -> str:
+    async def ask(image: bytes, prompt: str) -> str:
         r = await client.aio.models.generate_content(
-            model=name, contents=[types.Part.from_bytes(data=image, mime_type="image/jpeg"), PROMPT.format(query=query)],
-            config=config)
+            model=name, contents=[types.Part.from_bytes(data=image, mime_type="image/jpeg"), prompt], config=config)
         return r.text or ""
 
-    return locate
+    async def locate(image: bytes, query: str) -> str:
+        return await ask(image, PROMPT.format(query=query))
+
+    async def confirm(image: bytes, query: str) -> bool:
+        try:
+            return json.loads(await ask(image, CHECK.format(query=query))).get("yes") is True
+        except (ValueError, AttributeError):
+            return False
+
+    return locate, confirm
 
 
-def router(locate: Locate | None) -> APIRouter:
+def router(locate: Locate | None, confirm: Confirm | None) -> APIRouter:
     r = APIRouter()
 
     @r.post("/v1/ground")
@@ -96,6 +125,13 @@ def router(locate: Locate | None) -> APIRouter:
             raw = await locate(image, body.query)
         except Exception as e:
             raise HTTPException(502, f"The vision model failed: {type(e).__name__}: {e}")
-        return {"boxes": parse(raw), "ms": round((time.perf_counter() - t0) * 1000)}
+        boxes = parse(raw)
+        if confirm and boxes and (body.strict or (boxes[0]["confidence"] or 0) < SURE):
+            try:
+                kept = await confirm(crop(image, boxes[0]["box"]), body.query)
+            except Exception as e:
+                raise HTTPException(502, f"The vision model failed: {type(e).__name__}: {e}")
+            boxes = boxes if kept else []
+        return {"boxes": boxes, "ms": round((time.perf_counter() - t0) * 1000)}
 
     return r

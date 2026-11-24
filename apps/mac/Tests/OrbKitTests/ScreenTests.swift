@@ -116,3 +116,25 @@ import Testing
         #expect(back.position(at: 1, pointer: CGPoint(x: 9, y: 9)) == CGPoint(x: 9, y: 9))
     }
 }
+
+@Suite struct ReadingOrderTests {
+    func line(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat = 400) -> CGRect { CGRect(x: x, y: y, width: w, height: 14) }
+
+    @Test func twoColumnsAreReadOneAfterTheOther() {
+        let lines = [line(100, 900, 900), line(100, 800), line(600, 800), line(100, 780), line(600, 780), line(100, 760, 250)]
+        #expect(ReadingOrder.indices(of: lines) == [0, 1, 3, 5, 2, 4])  // the title, the left column, the right one
+    }
+
+    @Test func oneColumnStaysTopToBottom() {
+        let lines = [line(100, 500), line(100, 520), line(100, 480, 200)]
+        #expect(ReadingOrder.indices(of: lines) == [1, 0, 2])
+    }
+
+    @Test func aQuoteOverThreeLinesOfTheLeftColumnIsFoundInThatOrder() {
+        let text = ["The model starts", "Before we", "here and goes", "introduce it", "on to the end."]
+        let boxes = [line(100, 800), line(600, 800), line(100, 780), line(600, 780), line(100, 760)]
+        let ordered = ReadingOrder.indices(of: boxes).map { text[$0] }
+        #expect(TextMatch.find("starts here and goes on to the end", in: ordered)?.count == 3)
+        #expect(TextMatch.find("starts here and goes on to the end", in: text) == nil)
+    }
+}

@@ -100,7 +100,7 @@ class ReplyIn(BaseModel):
 def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, speech_url: str | None = None,
                self_url: str = "http://127.0.0.1:8100", share_key: str | None = None, probe=None,
                worker_port: int | None = None, livekit_probe=None, gemini_available=None,
-               gemini_only: bool = False, locate: ground.Locate | None = None) -> FastAPI:
+               gemini_only: bool = False, vision: tuple[ground.Locate, ground.Confirm] | None = None) -> FastAPI:
     """With `speech_url`, the bench API (bench.py) is on too. `share_key` lets a remote request in (access.py). The
     voice arguments go to `VoiceChannel` (voice.py)."""
     app = FastAPI(title="orb agent", docs_url=None, redoc_url=None)
@@ -129,7 +129,7 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, speech_
         return s
 
     app.include_router(channel.router(session_or_404))
-    app.include_router(ground.router(locate))
+    app.include_router(ground.router(*(vision or (None, None))))
 
     def with_config(s) -> dict:
         return {**s.state(), "config": configs.get(s.id, {})}
@@ -288,7 +288,7 @@ def build() -> FastAPI:
                       self_url=f"http://127.0.0.1:{port}", share_key=os.environ.get("ORB_SHARE_KEY"),
                       probe=listening, worker_port=int(os.environ.get("ORB_VOICE_PORT", "8081")),
                       livekit_probe=livekit_answers, gemini_only=os.environ.get("ORB_GEMINI_ONLY") == "1",
-                      locate=ground.gemini_locator())
+                      vision=ground.gemini_model())
 
 
 def main():

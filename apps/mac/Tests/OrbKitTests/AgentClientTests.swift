@@ -76,10 +76,10 @@ final class Stub: URLProtocol, @unchecked Sendable {
 
     @Test func groundSendsTheFrameAsBase64AndReadsTheBoxes() async throws {
         Stub.answers["POST /v1/ground"] = (200, #"{"boxes": [{"box": [243, 331, 292, 362], "label": "robot", "confidence": 0.9}], "ms": 1800}"#)
-        let boxes = try await Stub.client().ground(image: Data([0xFF, 0xD8, 0x01]), query: "the blue robot")
+        let boxes = try await Stub.client().ground(image: Data([0xFF, 0xD8, 0x01]), query: "the blue robot", strict: true)
         #expect(boxes == [GroundBox(box: [243, 331, 292, 362], label: "robot", confidence: 0.9)])
-        let body = try JSONDecoder().decode([String: String].self, from: Data(Stub.seen.last!.body.utf8))
-        #expect(body == ["image": "/9gB", "query": "the blue robot"])
+        let body = try JSONSerialization.jsonObject(with: Data(Stub.seen.last!.body.utf8)) as! [String: Any]
+        #expect(body["image"] as? String == "/9gB" && body["query"] as? String == "the blue robot" && body["strict"] as? Bool == true)
     }
 
     @Test func aServiceThatDoesNotAnswerSaysHowToStartIt() async {

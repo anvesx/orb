@@ -116,6 +116,6 @@ public protocol AgentAPI: Sendable {
     func token(session: String) async throws -> VoiceToken
     /// The session's state for the inspector, or nil when it has not changed since `version`.
     func state(session: String, since version: Int?) async throws -> [String: JSONValue]?
-    /// Where a described thing is on a JPEG of the screen.
-    func ground(image: Data, query: String) async throws -> [GroundBox]
+    /// Where a described thing is on a JPEG of the screen. `strict` checks every answer on its crop.
+    func ground(image: Data, query: String, strict: Bool) async throws -> [GroundBox]
 }

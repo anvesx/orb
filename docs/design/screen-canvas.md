@@ -41,16 +41,18 @@ grounder, so a picture never waits for OCR and a quote never goes to the vision 
 |---|---|---|---|---|
 | `text` | `TextGrounder` | Vision OCR of the frame (cached by frame id) + `TextMatch` + `ScreenMap.passage` | 0 ms cached, 0.5–1.5 s fresh | `visual` |
 | `ui` | `ElementGrounder` | the front window's Accessibility tree, at most 50 ms and 12 levels deep: visible elements whose title, description or value matches, scored exact > prefix > contains | < 50 ms | `text`, then `visual` |
-| `visual` | `SightGrounder` | the agent service's `POST /v1/ground`: the frame as JPEG (1280 px, quality 70) and the description; a Gemini vision model answers `{found, box_2d, confidence}` | about 1.8 s | — |
+| `visual` | `SightGrounder` | the agent service's `POST /v1/ground`: the frame as JPEG (1280 px, quality 70) and the description; a Gemini vision model answers `{found, box_2d, confidence}`; an answer under 0.9 confidence, or any answer for a `ui` target, is checked on its crop ("is this …? yes or no") | 2–3 s, 4 s checked | — |
 
 - **One answer or none, never a guess:** each grounder returns all candidates. Several with no clear best (text that
   is on the screen twice, two "Save" buttons) are ranked by distance to the pointer and the front window; when the
   top two are still close, the answer says `matches: n` and marks the first, so Gemini can say "the first of three".
 - **Checks on a sight answer:** `found` must be true, the box inside the frame, under 60 % of it, and not over orb's
-  own windows (they are excluded from the frame, so a box there is invented). The answer carries the model's
+  own windows (they are excluded from the frame, so a box there is invented). The live test showed why a crop check
+  is needed too: asked for a zoom button that full-screen Preview does not show, the model boxed the page handle at
+  0.88 confidence. A control that Accessibility could not find is suspect, so `ui` answers are always checked. The answer carries the model's
   `confidence`; Gemini hears it and can hedge.
 - **Timing:** Gemini Live's tool calls block (it waits for the answer, which keeps it from describing a mark that is
-  not there). Each grounder has a budget (text 2 s, ui 0.2 s, sight 3.5 s); past it the answer is "not found in time".
+  not there). Each grounder has a budget (text 2 s, ui 0.2 s, sight 6 s; a first sight run of 3.5 s ran out); past it the answer is "not found in time".
 - **Keys and privacy:** the app never holds a Google key; `/v1/ground` is the one place that calls the vision model
   (`ORB_GROUND_MODEL`, default `gemini-3.5-flash-lite`, temperature 0). A frame leaves the Mac only for a `visual`
   target, as the 1 fps video already does during a call. A remote request needs the share key (`access.py`).

@@ -24,7 +24,7 @@ final class FakeAPI: AgentAPI, @unchecked Sendable {
     }
     func token(session: String) async throws -> VoiceToken { VoiceToken(url: "wss://x", room: "orb-\(session)", identity: "u", token: "t") }
     func state(session: String, since version: Int?) async throws -> [String: JSONValue]? { nil }
-    func ground(image: Data, query: String) async throws -> [GroundBox] { [] }
+    func ground(image: Data, query: String, strict: Bool) async throws -> [GroundBox] { [] }
 }
 
 final class FakeTransport: VoiceTransport, @unchecked Sendable {

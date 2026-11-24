@@ -21,7 +21,7 @@ READ = "orb.screen.read"
 CANVAS = "orb.canvas"
 Kind = Literal["text", "ui", "visual"]
 Style = Literal["underline", "box", "marker", "circle"]
-TIMEOUT = 6.0  # the app's own budgets end first (sight 3.5 s); this only catches an app that is gone
+TIMEOUT = 9.0  # the app's own budgets end first (sight 6 s); this only catches an app that is gone
 NOT_SHARED = "The person's screen is not shared in this call: no orb app is in the room."
 
 
