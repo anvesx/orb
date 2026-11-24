@@ -13,13 +13,13 @@ Today it hosts one agent, `discussion`, with one instance for each LLM that a se
 ## 1. Input
 | Route | Body | Limits | Answer |
 |---|---|---|---|
-| `POST /v1/sessions` | `{"topic", "agent"?, "config"?}` | topic 1 to 2,000 characters; config below | 201 and the state |
+| `POST /v1/sessions` | `{"topic", "agent"?, "config"?, "sources"?}` | topic 1 to 2,000 characters; config below; `sources`: up to 100 files `{name, kind, text}` (kind markdown, text, pdf, document or code; a name, not a path; 150,000 characters each, 500,000 in all; decision 0020) | 201 and the state, with `sources: [{name, kind, chars, used, whole}]` (how much of each file is in the prompt) |
 | `PUT /v1/sessions/{id}/config` | the config | the LLM cannot change after the start | the config |
 | `GET /v1/models` | none | | `{"llm": {"default", "installed"}, "gemini": {"available", "models", "default_model", "voices", "default_voice"}}`; `available`: `GOOGLE_API_KEY` is set (its value is never sent) |
 | `GET /v1/sessions/{id}/instructions` | none | the session must exist | `{"instructions"}`: the system prompt of a Gemini Live call (orb's prompt without the per-turn note rule, and the voice rules); loads the topic's source, never warms the LLM |
 | `GET /v1/sessions` | none | | `[{id, topic, agent}]` |
 | `GET /v1/sessions/{id}[?since=v]` | none | ID rule (orb-core) | the state, or `{"version": v, "unchanged": true}` |
-| `PUT /v1/sessions/{id}` | `{"topic", "agent"?}` | | the state; creates the session when it is missing |
+| `PUT /v1/sessions/{id}` | `{"topic", "agent"?, "config"?, "sources"?}` | as `POST` | the state; creates the session when it is missing; never changes the topic, config or files of a session that exists |
 | `POST /v1/sessions/{id}/turns` | `{"text", "channel"?, "replace_last"?}` | text 1 to 8,000; channel web, voice, slack or test | NDJSON events |
 | `POST /v1/sessions/{id}/notes` | `{"text", "channel"?, "replace_last"?}` (channel default voice; `replace_last` as for turns) | as turns; the session's agent must be a `ReplyWriter` (else 400) | `{"read", "decision"}`: Jev's read and the persona note for a model that writes the reply itself (Gemini Live, decision 0018); 502 when the reader fails; an `orb.turn` span |
 | `POST /v1/sessions/{id}/replies` | `{"text", "channel"?, "interrupted"?}` | as notes | `{"check", "state"}`: the reply that model spoke is recorded and checked |

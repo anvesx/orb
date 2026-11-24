@@ -20,6 +20,7 @@ nothing, and Gemini Live writes the replies through `note` and `add_reply`.
 | Input | From | Limits | Trust |
 |---|---|---|---|
 | Topic | the person, at session start | 2,000 characters | untrusted; a URL in it is loaded through `orb_core.web` |
+| Files (`sources`) | a channel, at session start (decision 0020) | 100 files, 150,000 characters each, 500,000 in all; a name, not a path | untrusted; packed into the system prompt within `ORB_SOURCES_MAX_CHARS` (120,000) |
 | Person message | a channel, per turn | 8,000 characters; Jev sees the first 1,500 | untrusted |
 | `replace_last` flag | the voice channel | boolean | acted on only when the new text continues the last message |
 | Jev answers | the TypeSafe API | one probability in [0, 1] per question | trusted as data, checked against the 0.5 line |
@@ -134,6 +135,9 @@ reason?" after an Examiner need.
   quote in the note. The note says that the person does not see it and that the LLM must not mention it.
   A person can still try to steer the LLM; the debt rules do not depend on the LLM, so the persona choice and
   the checks stay correct.
+- **Files** go into the system prompt as reference material, not instructions. A file cannot close its
+  `<source>` block or open a fake one: `<source` and `</source` in its text or name lose their `<`. The state and the
+  logs hold each file's name, kind and sizes, never its text.
 - **Internal IDs** (D7, M5) are removed from the note, so the LLM cannot repeat them to the person.
 - **Snapshots** hold the full chat and the Jev trace. They are written to `data/sessions/`, which is not in git.
 
@@ -164,6 +168,7 @@ for the read would save about 0.5 s; it changes how the persona is chosen.
 | `replace_last` when the last message is not a prefix | nothing is undone | protects a real earlier turn |
 | The undone read | its Jev tokens stay counted | they were paid for |
 | A URL that does not load | the topic stays; `source.error` says why | the agent can still discuss the topic |
+| Files longer than the budget | in the order sent, each whole while it fits; the next is cut at a paragraph break and marked; once fewer than 500 characters are left, the rest are named only | the channel sends the file the person chose first; the model can say which files it has not read |
 | Jev says "changes view" by mistake | a record debt starts | a known error rate of the reader (2026-10-19: 0.53 to 0.73 on "Let's decide now") |
 | The LLM copies the note into its reply | the filter drops the copied lines; the person hears only the real reply | a small model copies a trailing system message, most on confusing input |
 | The note is moved before the person's message, or into the system prompt | no leak, but Gemma 4 makes 300 to 600 hidden reasoning tokens on confusing input: 8 to 14 s to the first word | measured 2026-10-21; so the note stays last, with the closing line and the filter |

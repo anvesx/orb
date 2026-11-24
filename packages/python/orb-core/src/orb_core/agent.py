@@ -31,6 +31,9 @@ CHANNELS = ("web", "voice", "slack", "test")
 SESSION_ID = re.compile(r"^[a-z0-9][a-z0-9-]{2,47}$")
 MAX_TOPIC = 2000
 MAX_TEXT = 8000
+SOURCE_KINDS = ("markdown", "text", "pdf", "document", "code")
+MAX_SOURCES, MAX_SOURCE_NAME = 100, 200
+MAX_SOURCE_CHARS, MAX_SOURCES_CHARS = 150_000, 500_000  # a long PDF; a folder (the prompt's budget cuts further)
 
 
 @dataclass(frozen=True)
@@ -85,8 +88,9 @@ class ReplyWriter(Protocol):
 class Agent(Protocol):
     name: str
 
-    def new_session(self, topic: str, session_id: str) -> Session:
-        """Start a session. The agent may do slow setup in the background."""
+    def new_session(self, topic: str, session_id: str, sources: list[dict] | None = None) -> Session:
+        """Start a session. The agent may do slow setup in the background. `sources` are files that the channel read:
+        `{name, kind, text}` (check_sources)."""
 
     async def health(self) -> dict:
         """What the agent needs, and whether each part answers."""
@@ -108,6 +112,26 @@ def check_session_id(session_id: str) -> str:
     if not SESSION_ID.match(session_id or ""):
         raise InputError("A session ID must be 3 to 48 characters: lower-case letters, digits and hyphens.")
     return session_id
+
+
+def check_sources(sources: list[dict]) -> list[dict]:
+    """The files a channel sends with a new session. A name is a file name: the service must not learn the folders."""
+    if len(sources) > MAX_SOURCES:
+        raise InputError(f"A session takes {MAX_SOURCES} files or fewer, not {len(sources)}.")
+    total = 0
+    for s in sources:
+        name = check_text(s.get("name"), MAX_SOURCE_NAME, "A file name")
+        if "/" in name or "\\" in name:
+            raise InputError(f"{name!r} is a path. Send the file name only.")
+        if s.get("kind") not in SOURCE_KINDS:
+            raise InputError(f"The kind of {name!r} must be one of {', '.join(SOURCE_KINDS)}.")
+        text = s.get("text") or ""
+        if len(text) > MAX_SOURCE_CHARS:
+            raise InputError(f"{name!r} has {len(text)} characters. The limit is {MAX_SOURCE_CHARS}.")
+        total += len(text)
+    if total > MAX_SOURCES_CHARS:
+        raise InputError(f"The files have {total} characters in all. The limit is {MAX_SOURCES_CHARS}.")
+    return sources
 
 
 def check_text(text: str, limit: int = MAX_TEXT, what: str = "The message") -> str:
@@ -132,16 +156,18 @@ class SessionStore:
         self._sessions: dict[str, Session] = {}
         self._last_used: dict[str, float] = {}
 
-    def create(self, topic: str, agent: str | None = None, session_id: str | None = None) -> Session:
+    def create(self, topic: str, agent: str | None = None, session_id: str | None = None,
+               sources: list[dict] | None = None) -> Session:
         name = agent or self.default_agent
         if name not in self.agents:
             raise InputError(f"There is no agent named {name!r}. Agents: {', '.join(self.agents)}.")
         topic = check_text(topic, MAX_TOPIC, "The topic")
         sid = check_session_id(session_id) if session_id else new_session_id()
+        sources = check_sources(sources or [])
         if sid in self._sessions:
             raise InputError(f"Session {sid} exists already.")
         self._evict()
-        session = self.agents[name].new_session(topic, sid)
+        session = self.agents[name].new_session(topic, sid, sources)
         self._sessions[sid] = session
         self._last_used[sid] = time.monotonic()
         return session

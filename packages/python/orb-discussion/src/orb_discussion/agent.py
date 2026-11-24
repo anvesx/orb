@@ -74,22 +74,23 @@ class DiscussionAgent:
         self.llm = llm
         self.load_source = load_source
 
-    def new_session(self, topic: str, session_id: str) -> "DiscussionSession":
-        return DiscussionSession(self, topic, session_id)
+    def new_session(self, topic: str, session_id: str, sources: list[dict] | None = None) -> "DiscussionSession":
+        return DiscussionSession(self, topic, session_id, sources)
 
     async def health(self) -> dict:
         return {"reader": type(self.reader).__name__, "llm": await self.llm.health() if self.llm else None}
 
 
 class DiscussionSession:
-    def __init__(self, agent: DiscussionAgent, topic: str, session_id: str):
+    def __init__(self, agent: DiscussionAgent, topic: str, session_id: str, sources: list[dict] | None = None):
         self.agent = agent
         self.id = session_id
         self.topic = topic
         self.agent_name = agent.name
         self.title = " ".join(web.URL_RE.sub("", topic).split()) or "Open discussion"
-        self.source: dict = {}
-        self.engine = DebtEngine(agent.reader, self.title)
+        self.source: dict = {}  # the web page that the topic names
+        self.sources = prompt.pack(sources or [])  # the files that the channel sent
+        self.engine = DebtEngine(agent.reader, self.title + (f" ({len(self.sources)} files)" if self.sources else ""))
         self.messages: list[dict] = []
         self.turns: list[dict] = []
         self.version = 0
@@ -103,10 +104,10 @@ class DiscussionSession:
 
     # --- setup ---
     def system_prompt(self) -> str:
-        return prompt.system_prompt(self.title, self.source)
+        return prompt.system_prompt(self.title, self.source, self.sources)
 
     def realtime_prompt(self) -> str:
-        return prompt.realtime_prompt(self.title, self.source)
+        return prompt.realtime_prompt(self.title, self.source, self.sources)
 
     async def prepare(self, warm: bool = True) -> None:
         """Load the source named in the topic and warm the LLM with the system prompt. Safe to call twice.
@@ -302,6 +303,7 @@ class DiscussionSession:
         return {
             "id": self.id, "agent": self.agent_name, "topic": self.topic, "title": self.title, "version": self.version,
             "source": {k: self.source.get(k) for k in ("url", "title", "words", "error") if k in self.source},
+            "sources": [{k: s[k] for k in ("name", "kind", "chars", "used", "whole")} for s in self.sources],
             "messages": self.messages, "turns": self.turns,
             "stage": L.stage, "stage_why": L.stage_why,
             "options": [{"id": o["id"], "from": mid(o["seq"]), "text": prompt.quote(o["text"], 120)} for o in L.options],

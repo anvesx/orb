@@ -497,3 +497,35 @@ def test_the_page_has_the_brain_and_search_switches_of_a_gemini_call(app_and_dir
     page = local(app_and_dir[0]).get("/").text
     assert 'id="m-gbrain"' in page and 'id="m-gsearch"' in page
     assert 'gemini_personas: $("m-gbrain").value === "orb"' in page and 'gemini_search: $("m-gsearch").value === "on"' in page
+
+
+FILES = [{"name": "launch-plan.md", "kind": "markdown", "text": "# Launch\nThe beta starts on 3 March."},
+         {"name": "pricing.pdf", "kind": "pdf", "text": "--- page 1 ---\nThe team plan costs 12 dollars."}]
+
+
+def test_a_session_holds_the_files_that_the_channel_sent_and_gemini_reads_them(tmp_path):
+    c, _ = gemini_app(tmp_path)
+    s = c.post("/v1/sessions", json={"topic": "Product plans", "config": {"voice_mode": "gemini-live"},
+                                     "sources": FILES}).json()
+    assert [(f["name"], f["used"], f["whole"]) for f in s["sources"]] == [
+        ("launch-plan.md", len(FILES[0]["text"]), True), ("pricing.pdf", len(FILES[1]["text"]), True)]
+    assert "text" not in s["sources"][0] and "3 March" not in json.dumps(c.get(f"/v1/sessions/{s['id']}").json())
+    text = c.get(f"/v1/sessions/{s['id']}/instructions").json()["instructions"]
+    assert '<source name="pricing.pdf" kind="pdf">' in text and "12 dollars" in text and "3 March" in text
+    assert "the file you use" in text and "note" not in text.lower()
+
+
+def test_put_creates_a_session_with_files_and_never_replaces_them(tmp_path):
+    c, _ = gemini_app(tmp_path)
+    a = c.put("/v1/sessions/room-8", json={"topic": "Notes", "sources": FILES[:1]}).json()
+    b = c.put("/v1/sessions/room-8", json={"topic": "Open discussion"}).json()  # the voice worker's call
+    assert [f["name"] for f in a["sources"]] == [f["name"] for f in b["sources"]] == ["launch-plan.md"]
+
+
+def test_files_with_a_path_an_unknown_kind_or_too_much_text_are_refused(tmp_path):
+    c, _ = gemini_app(tmp_path)
+    post = lambda files: c.post("/v1/sessions", json={"topic": "T", "sources": files})
+    assert post([{**FILES[0], "name": "Desktop/notes/plan.md"}]).status_code == 400
+    assert post([{**FILES[0], "kind": "movie"}]).status_code == 422
+    assert post([{**FILES[0], "text": "x" * 150_001}]).status_code == 422
+    assert post([{**FILES[0], "text": "x" * 150_000}] * 4).status_code == 400

@@ -60,7 +60,7 @@ def test_answer_fields():
     assert set(models) == {"gemini"}
     assert set(models["gemini"]) == {"available", "only", "models", "default_model", "voices", "default_voice"}
     s = c.post("/v1/sessions", json={"topic": "Cache API answers?", "config": {"voice_mode": "gemini-live"}}).json()
-    assert s["config"] == {"voice_mode": "gemini-live"}
+    assert s["config"] == {"voice_mode": "gemini-live"} and s["sources"] == []
     assert set(c.post("/v1/voice/token", json={"session_id": s["id"]}).json()) == {"url", "room", "identity", "token"}
     assert set(c.get(f"/v1/sessions/{s['id']}/instructions").json()) == {"instructions"}
 

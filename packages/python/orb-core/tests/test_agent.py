@@ -2,7 +2,8 @@ import json
 
 import pytest
 
-from orb_core.agent import Agent, Event, InputError, Session, SessionStore, check_session_id, new_session_id
+from orb_core.agent import (MAX_SOURCE_CHARS, Agent, Event, InputError, Session, SessionStore, check_session_id,
+                            check_sources, new_session_id)
 
 
 class EchoSession:
@@ -27,7 +28,7 @@ class EchoSession:
 class EchoAgent:
     name = "echo"
 
-    def new_session(self, topic, session_id):
+    def new_session(self, topic, session_id, sources=None):
         return EchoSession(topic, session_id)
 
     async def health(self):
@@ -91,3 +92,16 @@ def test_store_get_or_create_and_eviction():
     store.get("aaa")  # aaa is now the most recently used
     store.create("c", session_id="ccc")  # evicts bbb
     assert store.get("bbb") is None and store.get("aaa") is a
+
+
+def test_sources_are_file_names_of_known_kinds_within_the_limits():
+    ok = {"name": "plan.md", "kind": "markdown", "text": "# Plan"}
+    assert check_sources([ok]) == [ok]
+    for bad in ({**ok, "name": "notes/plan.md"}, {**ok, "name": " "}, {**ok, "kind": "video"},
+                {**ok, "text": "x" * (MAX_SOURCE_CHARS + 1)}):
+        with pytest.raises(InputError):
+            check_sources([bad])
+    with pytest.raises(InputError):
+        check_sources([ok] * 101)
+    with pytest.raises(InputError):  # every file under its own limit, too many characters in all
+        check_sources([{**ok, "text": "x" * MAX_SOURCE_CHARS}] * 4)

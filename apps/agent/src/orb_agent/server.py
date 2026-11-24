@@ -2,7 +2,7 @@
 
     python -m orb_agent.server            # http://127.0.0.1:8100, or ORB_AGENT_PORT
 
-POST /v1/sessions                 {"topic", "agent"?}       -> the session state (201)
+POST /v1/sessions                 {"topic", "agent"?, "config"?, "sources"?} -> the session state (201)
 GET  /v1/sessions                                           -> [{id, topic, agent}]
 GET  /v1/sessions/{id}[?since=v]                            -> the state, or {"version": v, "unchanged": true}
 PUT  /v1/sessions/{id}            {"topic", "agent"?}       -> the state; creates the session when it is missing
@@ -30,10 +30,13 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from orb_core import telemetry
-from orb_core.agent import CHANNELS, Event, InputError, ReplyWriter, SessionStore, check_session_id
+from orb_core.agent import (CHANNELS, MAX_SOURCE_CHARS, MAX_SOURCE_NAME, MAX_SOURCES, SOURCE_KINDS, Event, InputError,
+                            ReplyWriter, SessionStore, check_session_id)
 from orb_agent.access import AccessMiddleware, check_key
 from orb_agent.bench import make_router
 from orb_agent.voice import VoiceChannel, VoiceConfig, listening, livekit_answers
@@ -57,10 +60,21 @@ class SessionConfig(BaseModel):
     gemini_search: bool | None = None
 
 
+class SourceIn(BaseModel):
+    """A file that the channel read (decision 0020): its name, never its path."""
+    name: str = Field(min_length=1, max_length=MAX_SOURCE_NAME)
+    kind: Literal[SOURCE_KINDS]
+    text: str = Field(max_length=MAX_SOURCE_CHARS)
+
+
 class NewSession(BaseModel):
     topic: str = Field(min_length=1, max_length=2000)
     agent: str | None = None
     config: SessionConfig | None = None
+    sources: list[SourceIn] | None = Field(default=None, max_length=MAX_SOURCES)
+
+    def source_dicts(self) -> list[dict] | None:
+        return [s.model_dump() for s in self.sources] if self.sources else None
 
 
 class TurnIn(BaseModel):
@@ -158,7 +172,7 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, speech_
     async def create(body: NewSession):
         config = checked(body.config)
         try:
-            s = started(store.create(body.topic, body.agent), config)
+            s = started(store.create(body.topic, body.agent, sources=body.source_dicts()), config)
         except InputError as e:
             raise HTTPException(400, str(e))
         if config:
@@ -195,7 +209,7 @@ def create_app(store: SessionStore, voice: VoiceConfig | None = None, *, speech_
             s = store.get(check_session_id(sid))
             config = checked(body.config)  # also for a session that exists: a bad config is refused, not ignored
             if s is None:
-                s = started(store.create(body.topic, body.agent, sid), config)
+                s = started(store.create(body.topic, body.agent, sid, body.source_dicts()), config)
                 if config:
                     configs[s.id] = config
         except InputError as e:
