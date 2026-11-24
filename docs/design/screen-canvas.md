@@ -1,6 +1,6 @@
 # The screen canvas: how orb finds things on your screen and draws on it
 
-Status: proposed · Branch: `feat/mac-rough-marks` · Date: 2026-11-24 · Decision: 0022 · Replaces sections 5 and 14 of
+Status: built · Branch: `feat/mac-rough-marks` · Date: 2026-11-24 · Decision: 0022 · Replaces sections 5 and 14 of
 [mac-screen.md](mac-screen.md)
 
 ## 1. Why a new core
@@ -132,3 +132,12 @@ colour names (written during the live tests, never shipped), `PointTarget`.
 | CV-4 | OrbApp grounders: text (OCR cache by frame), element (AX), sight (JPEG + API) | Swift tests green, app builds |
 | CV-5 | OrbApp: `CanvasRenderer` with `RoughMarkLayer`, companion focus, AppModel wiring | app builds |
 | CV-6 | Live test, docs, PR, merge into staging | PR merged |
+
+## 11. Live results (2026-11-24, the test voice on a two-column paper in Preview)
+| Asked | Grounded by | Time | Result |
+|---|---|---|---|
+| box "2 Related Work" | text | 1.4 s | right |
+| underline "fast and intuitive Talker agent" | text | 1.6 s | right |
+| marker on a sentence over two lines | text | 1.4 s | both lines, left column only (after `ReadingOrder`; before it, the columns interleaved and the text match failed) |
+| circle "the blue robot" | sight | 2.6 s | a loop around the blue robot, confidence 0.98 |
+| circle "the zoom-in button" (not shown) | sight, crop check | — | not found, and Gemini said so once (before the no-retry rule, it tried four wordings) |

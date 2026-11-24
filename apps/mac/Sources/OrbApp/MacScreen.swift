@@ -72,6 +72,9 @@ actor MacScreen: ScreenService {
         let result = await grounding.ground(target, in: Frame(id: frame.id, displayID: frame.display.id,
                                                               bounds: frame.display.frame, excluded: excluded),
                                             pointer: pointer)
+        if case .found(let anchor, let by, _, _) = result {
+            log.debug("grounded \(target.kind.rawValue, privacy: .public) by \(by.rawValue, privacy: .public): \(anchor.rects.count) rects \(anchor.rects.map { "\($0.integral)" }.joined(separator: " "), privacy: .public)")
+        }
         log.debug("grounded \(target.kind.rawValue, privacy: .public) in \(Int(Date.now.timeIntervalSince(t0) * 1000)) ms")
         return result
     }

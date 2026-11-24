@@ -50,23 +50,26 @@ the agent's own state says.
 creates the session again (otherwise the worker would open a bare one).
 
 ## Screen
-At the join, `AppModel.shareScreen` serves the worker's two RPCs (`orb.screen.read`, `orb.screen.show`, answered even
-with the screen off, so Gemini hears why) and, with the setting on and Screen Recording allowed, starts the screen
-track: `LiveKitTransport.startScreen` makes a `BufferCapturer` track (`screenShareVideo`, 2 fps, 2.5 Mbit/s, no
-simulcast) and publishes it in the background, because a publish waits for the first frame's size. `MacScreen.feed`
-sends it a `SCScreenshotManager.captureSampleBuffer` of the display under the pointer (`ScreenChoice`) every second,
-longest side 1920 px, the pointer drawn and orb's own windows left out (`SCContentFilter` excluding this process).
-- **Read:** `MacScreen.read` = the front app, its focused window's `AXTitle`, `AXSelectedText` (never from an
-  `AXSecureTextField`), the window's `AXDocument` file through `Extractor`, and Vision's accurate OCR of a full
-  resolution screenshot (lines in reading order). `ScreenReading.budgeted` keeps the JSON under 12,000 UTF-8 bytes
-  (an RPC answer is at most 15 KB): selection 1,500, screen text 5,000, the document the rest, shrunk again if JSON
-  escapes grow it.
-- **Show:** `TextMatch.find` on the last OCR (at most 3 s old, else a fresh one) matches the quote on Unicode scalars,
-  case, punctuation and line breaks ignored, exact first, else the closest run of words at ≥ 0.8 similarity.
-  `VNRecognizedText.boundingBox(for:)` gives each line's box; `ScreenMap` turns it (and Gemini's 0–1000 points) into
-  global AppKit points on the display it was read on. The answer is `{"found": true}` or why not.
-- **Pointer:** `AppModel.pointer` holds the target. It clears when you start talking (not on orb's echo while it
-  speaks), 6 s after orb stops speaking, 10 s after a show at most, and at hang-up.
+The design is [screen-canvas.md](../../docs/design/screen-canvas.md). At the join, `AppModel.shareScreen` serves the
+worker's two RPCs (`orb.screen.read`, and `orb.canvas` for the canvas wire format in `contracts/canvas-ops.json`;
+both answered even with the screen off, so Gemini hears why) and, with the setting on and Screen Recording allowed,
+starts the screen track.
+- **Capture:** `ScreenStream` keeps one ScreenCaptureKit stream of the display under the pointer for the whole call
+  (2 fps at most, full pixel size, orb's windows excluded) and its latest complete frame (`ScreenFrame`, with an id).
+  A stream keeps macOS's capture indicator steady; a screenshot a second made it blink. The 1 fps video track
+  (`LiveKitTransport.startScreen`, a `BufferCapturer`) and the OCR both read that frame.
+- **Read:** `MacScreen.read` = `FrontApp.read` (Accessibility: app, window, selection never from a secure field, the
+  `AXDocument` file through `Extractor`, cached by file and date) and Vision's OCR of the frame, cached by frame id.
+  `ReadingOrder` puts the lines column by column, so text of two-column pages comes in reading order.
+  `ScreenReading.budgeted` keeps the answer under 12,000 UTF-8 bytes.
+- **Ground:** `Grounding` (OrbKit) routes a `Target` by kind (`text` → text, sight; `ui` → element, text, sight;
+  `visual` → sight), each grounder within its budget (2 s, 0.2 s, 6 s), ranks candidates (score, then nearness to
+  the pointer), counts ties as `matches`, and refuses boxes outside the frame, over 60 % of it, or over orb's island.
+  `TextGrounder`: `TextMatch.all` + `ScreenMap.passage`. `ElementGrounder`: the focused window's Accessibility tree,
+  `ElementMatch` (exact > prefix > contains). `SightGrounder`: a 1280 px JPEG of the frame to `POST /v1/ground`; the
+  service checks an answer on its crop when it is unsure or the target is a control.
+- **Canvas:** `Canvas.reduce` (OrbKit) keeps the annotations: an op id draws once; marks go when you talk, 6 s after
+  orb stops speaking, or 12 s after a mark orb never spoke about; a call's end clears them. `AppModel.canvas` holds it.
 
 ## Companion
 One transparent, click-through `NSPanel` per screen (all Spaces, full-screen auxiliary, status-bar level), rebuilt
@@ -75,11 +78,11 @@ the panel of the screen under the pointer moves its `CompanionView` to 14 pt rig
 `NSEvent.mouseLocation` (to the left near the right edge), with implicit animations off. There is no spring, so it
 trails the hardware cursor by one to two frames. The display links run only while a call is on and the companion is
 switched on (observation tracking on `AppModel`); otherwise they are paused and the panels hidden.
-When `AppModel.pointer` changes, the companion follows a `Flight`: a quadratic curve that arcs above the straight line
+When the canvas's focus changes, the companion follows a `Flight`: a quadratic curve that arcs above the straight line
 (0.5 s there, 0.35 s back to the pointer, ease in and out), as a pure function of time so every screen's display link
-asks it. Each screen's panel draws a highlighter layer over the target's rects on that screen (amber, rounded, a soft
-glow), swept in left to right line by line with a mask, just before the companion lands. The companion's bubble then
-shows the target's label.
+asks it. Each screen's `CanvasRenderer` draws the annotations anchored on its display, diffed by id; `RoughMarkLayer`
+draws a mark's `Rough` strokes (seeded, doubled, loose loops), one `CAShapeLayer` each, a pen's `strokeEnd` 0 → 1 one
+stroke after another. The companion's bubble shows the mark's note.
 `CompanionView`: a 28 pt orb with a level ring, and a bubble with orb's words while it speaks (your interim words while
 you speak). Settings switch the companion and the bubble.
 
@@ -119,6 +122,7 @@ With `ORB_LOG_TEXT=1` the worker logs each screen tool's payload and answer.
 |---|---|
 | `CallMachineTests` | press held or released through the join, the tail, the idle timeout, the agent-join warning, failures, new session, mic denied, late events, reconnect |
 | `ExtractorTests` | Markdown, code, PDF with and without text, DOCX and RTF |
+| `GroundingTests`, `GroundingPartsTests`, `CanvasReducerTests`, `CanvasContractTests`, `RoughTests`, `ReadingOrderTests` | routing and fall-through, ties and the pointer, refused sight boxes, budgets; all occurrences, control names, box and Accessibility coordinates; the canvas's lifetimes and op ids; the shared wire fixture; hand-drawn strokes; two-column reading order |
 | `TextMatchTests`, `ScreenMapTests`, `ScreenReadingTests`, `FlightTests`, `ScreenSettingsTests` | quotes across lines, misread letters, Devanagari; Vision and Gemini coordinates on two displays; the RPC byte budget with Hindi and escapes; bad show requests; the flight's arc; old settings |
 | `AgentClientTests` | bodies and paths against a stub `URLProtocol`, the service's error text, 404, no answer, unchanged state |
 | `VoiceTests` | agent state aliases, caption segment rules and polish, bench event decoding, the level smoother |

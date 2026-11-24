@@ -21,9 +21,10 @@ make mac-test     # the unit tests (no network, no microphone)
   "Ready" (the microphone is closed).
 - **Your screen:** look at anything (a PDF, a page, code) and ask "what does this paragraph mean?" or "where is the
   export button?". During a call orb shares the display under your pointer with Gemini (1 frame/s, orb's own windows
-  left out), reads the exact text when it needs it (`read_screen`: OCR, your selection, the open document), and shows
-  you: the companion flies there and highlights the words (`highlight_text`) or points (`point_at`). Nothing is shared
-  outside a call; Settings › Screen switches it off.
+  left out), reads the exact text when it needs it (`read_screen`: OCR, your selection, the open document), and draws
+  on it by hand while it talks (`mark`: a box, an underline, a marker stroke, or a loop around a picture). orb finds
+  what Gemini names by OCR, Accessibility or a vision model ([screen-canvas.md](../../docs/design/screen-canvas.md)).
+  Nothing is shared outside a call; Settings › Screen switches it off.
 - **Panel:** click the island or press ⌥⇧Space: the orb, the captions, one line of what orb can use (your screen,
   Google Search), and talk.
 - **Companion:** during a call a small orb follows your pointer and shows orb's words. Switch it off in Settings.
