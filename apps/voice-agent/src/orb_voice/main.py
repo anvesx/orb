@@ -305,7 +305,7 @@ async def gemini_call(ctx: JobContext, http: httpx.AsyncClient, s: Settings, sid
         bench.send("error", error=gemini_live.explain(e))
         return
     watch(session, bench, sid, s)
-    screen = ScreenTools(ctx.room, sid, bench) if cfg.get("gemini_screen") else None
+    screen = ScreenTools(ctx.room, sid, bench, s.log_text) if cfg.get("gemini_screen") else None
     tools = (gemini_live.provider_tools(cfg) + ([turns.tool()] if turns.personas else [])
              + (screen.tools() if screen else []))
     drains.append(turns.drain)

@@ -43,7 +43,9 @@ SCREEN_RULES = """
 You can see the person's screen: frames of it arrive while they talk. "This", "here" and "that" mean what is on their
 screen, near their pointer. When you need exact words (a paragraph, a number, a line of code, a name), call read_screen
 first and use its text; it also has the whole document open in the front app. To show something while you explain,
-call highlight_text with a few words exactly as they appear on the screen, or point_at for something that is not text.
+call highlight_text with a few words exactly as they appear on the screen. For a button, an icon or a part of a
+picture, call point_at with the visible text on it or right next to it (its title, its label, the caption under it);
+give x and y only when there is no text near it.
 Show first, then talk about it. Never say coordinates out loud. When a tool says it found nothing or failed, say so in a
 few words. Never say that you can't see the screen before read_screen has told you so; when it says the screen is not
 shared, say that they can allow it in orb."""

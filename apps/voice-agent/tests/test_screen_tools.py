@@ -57,8 +57,11 @@ def test_highlight_and_point_send_a_show_request():
     local = Local(answer='{"found": true}')
     tools = ScreenTools(Room(local), "s1")
     run(tool(tools, "highlight_text")(text="three dates", note="dates"))
-    run(tool(tools, "point_at")(x=1400, y=-5, label="Zoom"))
+    run(tool(tools, "point_at")(near_text="Export", label="here"))
+    run(tool(tools, "point_at")(near_text="", x=1400, y=0, label="Zoom"))
+    assert json.loads(run(tool(tools, "point_at")(near_text=" ", label="lost"))) == {"error": "Give near_text, or x and y."}
     assert [c[1:3] for c in local.calls] == [(screen_tools.SHOW, {"text": "three dates", "label": "dates"}),
+                                             (screen_tools.SHOW, {"text": "Export", "label": "here", "point": True}),
                                              (screen_tools.SHOW, {"x": 1000, "y": 0, "label": "Zoom"})]
 
 

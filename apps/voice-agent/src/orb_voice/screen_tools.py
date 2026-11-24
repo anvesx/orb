@@ -17,13 +17,13 @@ log = logging.getLogger("orb.voice")
 
 READ = "orb.screen.read"
 SHOW = "orb.screen.show"
-TIMEOUT = 4.0  # OCR of a display takes about half a second; Gemini waits in silence for the answer
+TIMEOUT = 8.0  # OCR of a full display takes 0.5 to 1.5 s; a slow first one must not fail the turn
 NOT_SHARED = "The person's screen is not shared in this call: no orb app is in the room."
 
 
 class ScreenTools:
-    def __init__(self, room: rtc.Room, sid: str, bench=None):
-        self.room, self.sid, self.bench = room, sid, bench
+    def __init__(self, room: rtc.Room, sid: str, bench=None, log_text: bool = False):
+        self.room, self.sid, self.bench, self.log_text = room, sid, bench, log_text
 
     def app(self) -> str | None:
         """The identity of the person's app: the one participant in the room that is not an agent."""
@@ -49,7 +49,8 @@ class ScreenTools:
                    else e.message or "orb's app could not do it")
             return json.dumps({"error": why})
         ms = round((time.perf_counter() - t0) * 1000)
-        log.info("screen tool", extra={"session": self.sid, "method": method, "ms": ms, "bytes": len(out)})
+        log.info("screen tool", extra={"session": self.sid, "method": method, "ms": ms, "bytes": len(out),
+                                       **({"payload": payload, "answer": out[:200]} if self.log_text else {})})
         if self.bench:
             self.bench.send("screen_tool", method=method, ms=ms)
         return out
@@ -73,14 +74,22 @@ class ScreenTools:
             return await self.call(SHOW, {"text": text, "label": note})
 
         @function_tool(name="point_at")
-        async def point_at(x: int, y: int, label: str = "") -> str:
-            """Move orb's pointer to something on the screen that is not text: a button, an icon, a part of a picture.
+        async def point_at(near_text: str, label: str = "", x: int = -1, y: int = -1) -> str:
+            """Move orb's pointer to something on the screen that is not a passage: a button, an icon, a menu, a part
+            of a picture. Your sense of positions on the screen is rough, so point by text when you can.
 
             Args:
-                x: 0 (left edge) to 1000 (right edge) of the screen you see.
-                y: 0 (top edge) to 1000 (bottom edge) of the screen you see.
+                near_text: the visible text on or right next to the thing, exactly as on screen: a button's title, an
+                    icon's label, the caption under a picture (for a figure of a robot captioned "Reasoner Agent",
+                    "Reasoner Agent"). Empty only when no text is near; then give x and y.
                 label: a very short label shown next to the pointer, or empty.
+                x: only when no text is near: 0 (left edge) to 1000 (right edge) of the screen you see.
+                y: only when no text is near: 0 (top edge) to 1000 (bottom edge) of the screen you see.
             """
-            return await self.call(SHOW, {"x": max(0, min(1000, x)), "y": max(0, min(1000, y)), "label": label})
+            if near_text.strip():
+                return await self.call(SHOW, {"text": near_text, "label": label, "point": True})
+            if x < 0 or y < 0:
+                return json.dumps({"error": "Give near_text, or x and y."})
+            return await self.call(SHOW, {"x": min(1000, x), "y": min(1000, y), "label": label})
 
         return [read_screen, highlight_text, point_at]

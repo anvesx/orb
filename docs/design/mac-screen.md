@@ -61,7 +61,7 @@ At 1024 px a frame is enough to see what is on the screen and read big text, not
 tool `read_screen` closes that gap.
 
 ## 4. Reading: `read_screen`
-A Gemini function tool in the worker; it calls the app by LiveKit RPC (`orb.screen.read`, 4 s timeout). The app answers
+A Gemini function tool in the worker; it calls the app by LiveKit RPC (`orb.screen.read`, 8 s timeout). The app answers
 JSON, at most 12 000 UTF-8 bytes (a LiveKit RPC payload is limited to 15 KB on the v1 wire; error 1504 past it):
 ```json
 { "app": "Preview", "window": "pricing.pdf – page 3 of 12",
@@ -77,21 +77,26 @@ JSON, at most 12 000 UTF-8 bytes (a LiveKit RPC payload is limited to 15 KB on t
   apps set). The text comes from the existing `Extractor` (PDF, Markdown, text, code, Word, RTF). Missing for a browser
   page; the screen text covers that.
 - **screen_text:** Vision `VNRecognizeTextRequest` (accurate, language correction on) on a fresh screenshot of the
-  shared display (the same capture as section 3), orb's windows left out. About 0.3 to 0.6 s on Apple silicon. The
+  shared display (the same capture as section 3), orb's windows left out. About 0.5 to 1.5 s on Apple silicon for a full Retina display
+  (measured 1.2 s for 97 lines); Vision's model is loaded when the call starts, and the document is read at the same
+  time as the OCR and kept by file and date. The
   display's frame and scale are kept with the result, so a later show maps to where the words were.
 - `ScreenReading.budgeted()` cuts each part to its share of the 12 000 bytes (selection 1 500, screen text 5 000, the
   document the rest), so one huge document can't crowd out the screen text. `cut: true` tells Gemini there is more.
 - With no Screen Recording permission: `screen_text` is missing and `"note"` says why. With no Accessibility: app only.
 
 ## 5. Showing: `highlight_text` and `point_at`
-Two function tools; both call `orb.screen.show` (4 s timeout) and return `{"found": true}` or `{"found": false, "why": "…"}`, so
+Two function tools; both call `orb.screen.show` (8 s timeout) and return `{"found": true}` or `{"found": false, "why": "…"}`, so
 Gemini can say "I can't find that on your screen" instead of pointing at nothing.
 - **`highlight_text(text, note)`:** `text` is a few words exactly as they appear on screen (one passage). The app OCRs
   the display, finds the passage (`TextMatch`: case, punctuation and spaces ignored; it may run over line breaks; the
   closest match wins when it is at least 0.8 similar), and gets each matched line's box from Vision
   (`VNRecognizedText.boundingBox(for:)`). Exact, unlike coordinates guessed from a 1024 px frame.
-- **`point_at(x, y, label)`:** for what is not text (an icon, a slider, a part of a chart). `x` and `y` are 0 to 1000
-  over the shared screen, left to right and top to bottom, the convention Gemini is trained on.
+- **`point_at(near_text, label, x, y)`:** for what is not a passage (a button, an icon, a part of a picture). Gemini
+  gives the visible text on it or next to it (a title, a label, a caption), and the app points at that text, found
+  the same way. The live test showed why: Gemini Live's positions on a 1024 px frame were off by a third of the screen
+  (the blue robot at x 75 of 1000 instead of about 350), while its text is exact. `x` and `y` (0 to 1000, left to
+  right and top to bottom) stay as the fallback when no text is near.
 - **What you see:** the companion leaves the pointer, flies to the target along a curved path (0.5 s, ease in and out),
   and stays next to it with a bubble that holds `note` or `label`. A highlight sweeps over the matched words (rounded
   boxes in the state colour, soft glow, fill drawn left to right in 0.35 s). A new show replaces the old one. It lasts
@@ -131,8 +136,8 @@ sources stays (decision 0020: a later context or the brain can use it).
 You can see the person's screen: frames of it arrive while they talk. "This", "here" and "that" mean what is on their
 screen, near their pointer. When you need exact words (a paragraph, a number, a line of code, a name), call read_screen
 first and use its text; it also has the whole document open in the front app. To show something while you explain,
-call highlight_text with a few words exactly as they appear on the screen, or point_at for something that is not
-text. Show first, then talk about it. Never say coordinates out loud. When a tool says it found nothing, say so
+call highlight_text with a few words exactly as they appear on the screen. For a button, an icon or a part of a
+picture, call point_at with the visible text on it or right next to it; x and y only when there is no text near it. Show first, then talk about it. Never say coordinates out loud. When a tool says it found nothing, say so
 briefly. When the screen is not shared, say that you can't see it and that they can allow it in orb.
 ```
 `VOICE_RULES` drops its file sentence: there are no files in a call any more.
@@ -187,7 +192,7 @@ briefly. When the screen is not shared, say that you can't see it and that they 
 - Python `gemini`: `SCREEN_RULES` only with `gemini_screen`; the server accepts `gemini_screen`.
 - Python `main.gemini_call`: screen on → video input on and the three tools; off → neither.
 
-**Live (by me, then by you):** a still PDF (frames keep coming), the pointer moved to a second display, then open a PDF in Preview, call, ask "what's on my screen", "explain the second paragraph"
+**Live (by me with the test voice, `apps/mac/LLD.md`, then by you):** a still PDF (frames keep coming), the pointer moved to a second display, then open a PDF in Preview, call, ask "what's on my screen", "explain the second paragraph"
 (expect `read_screen`, then `highlight_text` on it), "where is the zoom button" (`point_at`), "what's the latest
 version of Swift" (search). Check the log for tool calls and their time, and watch the companion.
 
@@ -201,3 +206,13 @@ version of Swift" (search). Check the log for tool calls and their time, and wat
 | SC-4 | Companion: fly to a target, highlight layer, bubble | seen live |
 | SC-5 | Panel and Settings (section 6); Accessibility asked only when the double tap is on | seen live |
 | SC-6 | Live test (section 11), docs (README, LLD, mac-app.md), PR, merge into staging | PR merged |
+
+## 13. Live results (2026-11-24)
+| Check | Result |
+|---|---|
+| Video only: "what app and title" on a full-screen paper | right ("3 The Talker-Reasoner Agent Model") |
+| `read_screen` on an 11-page PDF | 1.9 s, 11.9 KB (it timed out at 4 s before the parallel read, the warm-up and the 8 s limit) |
+| `highlight_text` "the sentence that defines the Talker agent" | found in 0.24 s, one line, the left column only (a fix: OCR's order joined the right column) |
+| `point_at` the blue robot | by Gemini's x and y: 120 to 500 px off; by `near_text` "Reasoner Agent": on its caption |
+| Google Search "latest Swift" | one search, the source named |
+| Hindi and Hinglish speech (the owner) | read and highlight worked; replies were sometimes in Devanagari |
