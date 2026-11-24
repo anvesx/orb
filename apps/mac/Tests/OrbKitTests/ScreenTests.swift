@@ -88,12 +88,6 @@ import Testing
         #expect(r.document?.cut == false && r.document?.text == "Hi")
         #expect(r.seeing == "Notes · n.md" && ScreenReading(app: "Finder").seeing == "Finder")
     }
-
-    @Test func aBadShowRequestIsAnAnswerNotACrash() async {
-        let (answer, target) = await ScreenRPC.answerShow("not json", FakeScreen())
-        #expect(answer.contains("error") && target == nil)
-        #expect(await ScreenRPC.answerShow("{}", FakeScreen()).answer.contains("Give text"))
-    }
 }
 
 @Suite struct ScreenSettingsTests {

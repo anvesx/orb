@@ -16,14 +16,15 @@ final class Shell {
     let model: AppModel
     let island: IslandWindow
     let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-    let screen = MacScreen()
     var companion: CompanionOverlay?
     var optionTap: OptionTap?
     var windows: [String: NSWindow] = [:]
 
     init() {
-        model = AppModel(transport: LiveKitTransport(), screen: screen)
         island = IslandWindow()
+        let screen = MacScreen(api: { AgentClient(base: Settings.load().serviceBase) },
+                               excluded: { [panel = island.panel] in [panel.frame] })
+        model = AppModel(transport: LiveKitTransport(), screen: screen)
         island.show(IslandRoot(model: model, island: island, actions: PanelActions(
             openSettings: { [weak self] in self?.showSettings() },
             allowScreen: { Self.openPrivacy("Privacy_ScreenCapture") })))

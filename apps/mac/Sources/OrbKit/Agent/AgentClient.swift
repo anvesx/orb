@@ -45,6 +45,12 @@ public struct AgentClient: AgentAPI {
         return state["unchanged"]?.bool == true ? nil : state
     }
 
+    public func ground(image: Data, query: String) async throws -> [GroundBox] {
+        struct Body: Encodable { var image: String; var query: String }
+        struct Answer: Decodable { var boxes: [GroundBox] }
+        return try await send("POST", "v1/ground", Body(image: image.base64EncodedString(), query: query), as: Answer.self).boxes
+    }
+
     // MARK: - HTTP
 
     func get<T: Decodable>(_ path: String, as: T.Type) async throws -> T {

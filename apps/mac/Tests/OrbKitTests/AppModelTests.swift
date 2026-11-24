@@ -24,6 +24,7 @@ final class FakeAPI: AgentAPI, @unchecked Sendable {
     }
     func token(session: String) async throws -> VoiceToken { VoiceToken(url: "wss://x", room: "orb-\(session)", identity: "u", token: "t") }
     func state(session: String, since version: Int?) async throws -> [String: JSONValue]? { nil }
+    func ground(image: Data, query: String) async throws -> [GroundBox] { [] }
 }
 
 final class FakeTransport: VoiceTransport, @unchecked Sendable {
@@ -52,15 +53,17 @@ final class FakeScreen: ScreenService, @unchecked Sendable {
     var allow = true
     var fed: [Bool] = []
     var reading = ScreenReading(app: "Preview", window: "pricing.pdf", screenText: "Launch on the third of March")
-    var lines = ["Pricing", "Launch on the third", "of March."]
+    var grounded: Grounded = .found(anchor: .screen(displayID: 1, rects: [CGRect(x: 1, y: 2, width: 30, height: 10)], frameID: 3),
+                                    by: .text, matches: 1, confidence: nil)
+    var asked: [Target] = []
 
     func allowed(ask: Bool) async -> Bool { allow }
     func feed(_ sink: ScreenSink?) async { fed.append(sink != nil) }
     func read() async -> ScreenReading { reading }
-    func locate(_ text: String) async -> [CGRect]? {
-        TextMatch.find(text, in: lines).map { $0.map { CGRect(x: $0.range.lowerBound, y: 100 - $0.line * 10, width: $0.range.count, height: 10) } }
+    func ground(_ target: Target) async -> Grounded {
+        asked.append(target)
+        return grounded
     }
-    func spot(x: Int, y: Int) async -> CGPoint? { ScreenMap.point(x: x, y: y, display: CGRect(x: 0, y: 0, width: 1000, height: 1000)) }
 }
 
 @MainActor
@@ -117,16 +120,19 @@ func waitFor(_ ok: () -> Bool) async {
         #expect(transport.screens == 1 && screen.fed == [true] && m.screenAllowed == true)
         let read = await transport.served[ScreenRPC.read]!("{}")
         #expect(read.contains("\"app\":\"Preview\"") && m.seeing == "Preview · pricing.pdf")
-        let shown = await transport.served[ScreenRPC.show]!(#"{"text":"third of march","label":"date"}"#)
-        #expect(shown == #"{"found":true}"#)
-        #expect(m.pointer?.rects.count == 2 && m.pointer?.label == "date")
-        _ = await transport.served[ScreenRPC.show]!(#"{"text":"Pricing","point":true,"label":"here"}"#)
-        #expect(m.pointer?.rects.isEmpty == true && m.pointer?.point == CGPoint(x: 3.5, y: 100))
-        let missed = await transport.served[ScreenRPC.show]!(#"{"text":"refund policy"}"#)
-        #expect(missed.contains("\"found\":false"))
+        let marked = await transport.served[CanvasOp.method]!(
+            #"{"v":1,"op":"mark","opId":"a1","target":"third of March","kind":"text","style":"box","note":"date"}"#)
+        #expect(marked == #"{"by":"text","found":true,"id":"a1","matches":1}"#)
+        #expect(screen.asked == [Target("third of March", kind: .text)])
+        #expect(m.canvas.focus?.kind == .mark(.box) && m.canvas.focus?.note == "date")
+        screen.grounded = .notFound("\"refund policy\" is not on the screen.")
+        let missed = await transport.served[CanvasOp.method]!(#"{"v":1,"op":"mark","opId":"a2","target":"refund policy","kind":"text"}"#)
+        #expect(missed.contains("\"found\":false") && m.canvas.annotations.count == 1)
+        #expect(await transport.served[CanvasOp.method]!(#"{"v":1,"op":"clear","opId":"a3"}"#) == #"{"cleared":1}"#)
+        #expect(await transport.served[CanvasOp.method]!("nonsense").contains("did not understand"))
         m.hangUp()
         await waitFor { screen.fed == [true, false] }
-        #expect(m.pointer == nil && !m.sharing)
+        #expect(m.canvas.annotations.isEmpty && !m.sharing)
     }
 
     @Test func withTheScreenOffNothingIsSharedAndTheToolsSaySo() async {
@@ -135,6 +141,7 @@ func waitFor(_ ok: () -> Bool) async {
         await waitFor { transport.served.count == 2 }
         #expect(transport.screens == 0 && screen.fed.isEmpty)
         #expect(await transport.served[ScreenRPC.read]!("{}").contains("turned off screen sharing"))
+        #expect(await transport.served[CanvasOp.method]!(#"{"v":1,"op":"clear","opId":"x"}"#).contains("turned off screen sharing"))
     }
 
     @Test func withoutThePermissionTheCallGoesOnWithVoiceOnly() async {
@@ -145,19 +152,19 @@ func waitFor(_ ok: () -> Bool) async {
         #expect(m.call.phase == .live && transport.screens == 0 && !m.sharing)
     }
 
-    @Test func thePointerGoesWhenYouTalkButNotOnOrbsOwnEcho() async {
+    @Test func marksGoWhenYouTalkButNotOnOrbsOwnEcho() async {
         let m = model()
         m.talkDown()
         await waitFor { transport.served.count == 2 }
-        _ = await transport.served[ScreenRPC.show]!(#"{"x":500,"y":250}"#)
-        #expect(m.pointer?.point == CGPoint(x: 500, y: 750))
+        _ = await transport.served[CanvasOp.method]!(#"{"v":1,"op":"mark","opId":"a1","target":"robot","kind":"visual","style":"circle"}"#)
+        #expect(m.canvas.annotations.count == 1)
         transport.continuation?.yield(.agentState(.speaking))
         transport.continuation?.yield(.youSpeaking(true))
         await waitFor { m.call.agent == .speaking && m.youSpeaking }
-        #expect(m.pointer != nil)
+        #expect(m.canvas.annotations.count == 1 && m.canvas.expires == .distantFuture)
         transport.continuation?.yield(.agentState(.listening))
         transport.continuation?.yield(.youSpeaking(true))
-        await waitFor { m.pointer == nil }
-        #expect(m.pointer == nil)
+        await waitFor { m.canvas.annotations.isEmpty }
+        #expect(m.canvas.annotations.isEmpty)
     }
 }

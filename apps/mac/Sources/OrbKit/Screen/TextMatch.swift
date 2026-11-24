@@ -17,23 +17,33 @@ public enum TextMatch {
     public static let minSimilarity = 0.8
     static let space: Unicode.Scalar = " "
 
-    /// The spans of the first match in reading order, or nil.
-    public static func find(_ quote: String, in lines: [String]) -> [Span]? {
-        let q = normalize(quote).text
-        guard !q.isEmpty else { return nil }
-        let screen = Screen(lines)
-        if let start = firstIndex(of: q, in: screen.text) { return screen.spans(start..<(start + q.count)) }
-        return closest(q, screen)
+    public struct Match: Equatable, Sendable {
+        public var spans: [Span]
+        public var score: Double
     }
 
-    static func firstIndex(of q: [Unicode.Scalar], in text: [Unicode.Scalar]) -> Int? {
-        guard q.count <= text.count else { return nil }
-        for i in 0...(text.count - q.count) where text[i] == q[0] && Array(text[i..<(i + q.count)]) == q { return i }
-        return nil
+    /// The spans of the first match in reading order, or nil.
+    public static func find(_ quote: String, in lines: [String]) -> [Span]? {
+        all(quote, in: lines).first?.spans
+    }
+
+    /// Every exact occurrence in reading order (score 1); without one, the closest run of words (its similarity).
+    public static func all(_ quote: String, in lines: [String]) -> [Match] {
+        let q = normalize(quote).text
+        guard !q.isEmpty else { return [] }
+        let screen = Screen(lines)
+        let exact = indices(of: q, in: screen.text).map { Match(spans: screen.spans($0..<($0 + q.count)), score: 1) }
+        if !exact.isEmpty { return exact }
+        return closest(q, screen).map { [$0] } ?? []
+    }
+
+    static func indices(of q: [Unicode.Scalar], in text: [Unicode.Scalar]) -> [Int] {
+        guard q.count <= text.count else { return [] }
+        return (0...(text.count - q.count)).filter { i in text[i] == q[0] && Array(text[i..<(i + q.count)]) == q }
     }
 
     /// The run of screen words, as many as the quote has (one more or less), most like the quote.
-    static func closest(_ q: [Unicode.Scalar], _ screen: Screen) -> [Span]? {
+    static func closest(_ q: [Unicode.Scalar], _ screen: Screen) -> Match? {
         let qWords = q.split(separator: space).count
         let words = screen.words
         var best: (score: Double, range: Range<Int>)?
@@ -45,7 +55,7 @@ public enum TextMatch {
             }
         }
         guard let best, best.score >= minSimilarity else { return nil }
-        return screen.spans(best.range)
+        return Match(spans: screen.spans(best.range), score: best.score)
     }
 
     static func similarity(_ a: [Unicode.Scalar], _ b: [Unicode.Scalar]) -> Double {
