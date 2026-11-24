@@ -19,7 +19,7 @@ struct PanelView: View {
                     .accessibilityAddTraits(.updatesFrequently)
             }
             .frame(maxWidth: .infinity)
-            CaptionsView(captions: model.captions, hint: "Hold \(model.talkShortcut) and talk.")
+            CaptionsView(captions: model.captions, hint: "Hold \(model.talkShortcut) and talk" + (model.doubleTapBlocked == nil ? ", or double-tap ⌥ and just talk." : "."))
             ContextView(model: model, pickFiles: actions.pickFiles)
             if let warning = model.warning {
                 WarningView(text: warning)
@@ -66,11 +66,6 @@ struct PanelView: View {
     var footer: some View {
         HStack(spacing: 10) {
             TalkButton(model: model, shortcut: model.talkShortcut)
-            Button { model.toggleHandsFree() } label: {
-                Label("Hands-free", systemImage: model.call.handsFree ? "waveform.circle.fill" : "waveform.circle")
-            }
-            .buttonStyle(PillStyle(tint: model.call.handsFree ? Theme.listen : Theme.ink2))
-            .help("Listen without holding a key (double-tap ⌥)")
             Spacer()
             if model.call.phase != .idle {
                 Button("Hang up") { model.hangUp() }

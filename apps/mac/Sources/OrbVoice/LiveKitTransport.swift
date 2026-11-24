@@ -8,6 +8,10 @@ import OrbKit
 public actor LiveKitTransport: VoiceTransport {
     public nonisolated let levels = AudioLevels()
     var room: Room?
+    var silence: Task<Void, Never>?
+    /// After a release the track sends silence this long before it mutes: a muted track sends nothing, and the model's
+    /// turn detection (700 ms of silence, gemini_live.py) would wait for an end of the turn that never comes.
+    static let endOfTurnSilence: Duration = .milliseconds(1200)
 
     public init() {}
 
@@ -33,10 +37,22 @@ public actor LiveKitTransport: VoiceTransport {
     }
 
     public func setMicrophone(_ on: Bool) async throws {
-        try await room?.localParticipant.setMicrophone(enabled: on)
+        silence?.cancel()
+        if on {
+            AudioManager.shared.isMicrophoneMuted = false
+            try await room?.localParticipant.setMicrophone(enabled: true)
+            return
+        }
+        AudioManager.shared.isMicrophoneMuted = true  // the voice-processing input sends zeros: the end of the turn
+        silence = Task {
+            try? await Task.sleep(for: Self.endOfTurnSilence)
+            guard !Task.isCancelled else { return }
+            _ = try? await room?.localParticipant.setMicrophone(enabled: false)
+        }
     }
 
     public func disconnect() async {
+        silence?.cancel()
         await room?.disconnect()
         room = nil
         levels.set(you: 0)

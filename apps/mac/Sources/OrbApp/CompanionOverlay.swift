@@ -68,15 +68,21 @@ final class ScreenOverlay: NSObject {
         link?.add(to: .main, forMode: .common)
     }
 
+    /// The window is on screen for the whole call: a view's display link ticks only while its window is visible.
     func activeChanged() {
+        if active {
+            companion.isHidden = true
+            window.orderFrontRegardless()
+        } else {
+            window.orderOut(nil)
+        }
         link?.isPaused = !active
-        if !active { window.orderOut(nil) }
     }
 
     @objc func tick(_ link: CADisplayLink) {
         let mouse = NSEvent.mouseLocation
         let here = NSMouseInRect(mouse, screen.frame, false)
-        if here != window.isVisible { here ? window.orderFrontRegardless() : window.orderOut(nil) }
+        companion.isHidden = !here
         guard here else { return }
         let size = companion.intrinsicContentSize
         var x = mouse.x - screen.frame.minX + 14
