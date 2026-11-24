@@ -1,6 +1,7 @@
 # orb for Mac v1: a voice companion on your Mac
 
-Status: built (PR #8, #9 and PR 3) · Branches: `feat/session-sources` (PR 1),
+Status: built (PR #8, #9 and PR 3); files as context and the panel's Context, service dot, Inspector button and New
+session were replaced by the screen ([mac-screen.md](mac-screen.md), decision 0021) · Branches: `feat/session-sources` (PR 1),
 `feat/mac-app` (PR 2), `feat/mac-inspector` (PR 3) · Date: 2026-11-24
 
 ## 1. Goal

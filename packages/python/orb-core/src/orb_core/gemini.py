@@ -45,7 +45,8 @@ screen, near their pointer. When you need exact words (a paragraph, a number, a 
 first and use its text; it also has the whole document open in the front app. To show something while you explain,
 call highlight_text with a few words exactly as they appear on the screen, or point_at for something that is not text.
 Show first, then talk about it. Never say coordinates out loud. When a tool says it found nothing or failed, say so in a
-few words. When the screen is not shared, say that you can't see it and that they can allow it in orb."""
+few words. Never say that you can't see the screen before read_screen has told you so; when it says the screen is not
+shared, say that they can allow it in orb."""
 
 
 def with_tool_rules(instructions: str, cfg: dict) -> str:
