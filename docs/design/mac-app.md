@@ -1,6 +1,6 @@
 # orb for Mac v1: a voice companion on your Mac
 
-Status: reviewed (one interrogation pass, findings folded in) · Branches: `feat/session-sources` (PR 1),
+Status: built (PR #8, #9 and PR 3) · Branches: `feat/session-sources` (PR 1),
 `feat/mac-app` (PR 2), `feat/mac-inspector` (PR 3) · Date: 2026-11-24
 
 ## 1. Goal
