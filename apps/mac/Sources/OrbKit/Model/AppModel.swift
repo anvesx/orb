@@ -24,7 +24,13 @@ public final class AppModel {
     /// A problem that does not end the call (a worker error, a reply with no words).
     public private(set) var notice: String?
     public private(set) var events: [String] = []
+    /// The inspector's view of the session (polled while the inspector is open) and the call's latency table.
+    public private(set) var engine: EngineView?
+    public private(set) var turnLog = TurnLog()
+    @ObservationIgnored var engineSession: String?
     public var settings: Settings { didSet { settings.save() } }
+    /// How the talk shortcut reads, for the hints (the app sets it).
+    public var talkShortcut = "⌥ Space"
 
     public let providers: [any ContextProvider]
     public var levels: AudioLevels { transport.levels }
@@ -84,6 +90,30 @@ public final class AppModel {
         }
     }
 
+    /// Polls the session's state every 0.7 s while `on` (the web page's rate on this machine).
+    public func inspect(_ on: Bool) {
+        cancel("poll")
+        guard on else { return }
+        tasks["poll"] = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.poll()
+                try? await Task.sleep(for: .milliseconds(700))
+            }
+        }
+    }
+
+    func poll() async {
+        guard let sid = sessionID else { return }
+        if engineSession != sid { engine = nil; engineSession = sid }
+        do {
+            if let state = try await api.state(session: sid, since: engine?.version), sid == sessionID {
+                engine = EngineView(state: state)
+            }
+        } catch let e as AgentError where e.isMissingSession && sid == sessionID {
+            run(.forgetSession)  // the service restarted: the next call makes the session again
+        } catch {}
+    }
+
     // MARK: - The machine
 
     public func send(_ event: CallEvent) {
@@ -97,6 +127,7 @@ public final class AppModel {
         case .prepare:
             notice = nil
             captions = Captions()
+            turnLog = TurnLog()
             tasks["prepare"] = Task { await prepare() }
         case .cancelPrepare:
             cancel("prepare")
@@ -229,6 +260,7 @@ public final class AppModel {
 
     func bench(_ e: BenchEvent) {
         log(e.summary)
+        turnLog.add(e)
         switch e.type {
         case "polished":
             if e["applied"]?.bool == true, let heard = e["heard"]?.string, let text = e["text"]?.string {

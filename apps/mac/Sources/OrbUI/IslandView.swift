@@ -59,11 +59,11 @@ public struct IslandView: View {
 public struct PanelActions {
     public var pickFiles: () -> Void
     public var openSettings: () -> Void
-    public var talkShortcut: String
+    public var openInspector: () -> Void
 
-    public init(pickFiles: @escaping () -> Void, openSettings: @escaping () -> Void, talkShortcut: String) {
+    public init(pickFiles: @escaping () -> Void, openSettings: @escaping () -> Void, openInspector: @escaping () -> Void) {
         self.pickFiles = pickFiles
         self.openSettings = openSettings
-        self.talkShortcut = talkShortcut
+        self.openInspector = openInspector
     }
 }
