@@ -10,8 +10,23 @@ public struct Settings: Codable, Equatable, Sendable {
     public var companion = true
     public var bubble = true
     public var idleMinutes = 3.0
+    public var doubleTapOption = true
 
     public init() {}
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = Settings()
+        serviceURL = try c.decodeIfPresent(String.self, forKey: .serviceURL) ?? d.serviceURL
+        geminiModel = try c.decodeIfPresent(String.self, forKey: .geminiModel)
+        geminiVoice = try c.decodeIfPresent(String.self, forKey: .geminiVoice)
+        personas = try c.decodeIfPresent(Bool.self, forKey: .personas) ?? d.personas
+        search = try c.decodeIfPresent(Bool.self, forKey: .search) ?? d.search
+        companion = try c.decodeIfPresent(Bool.self, forKey: .companion) ?? d.companion
+        bubble = try c.decodeIfPresent(Bool.self, forKey: .bubble) ?? d.bubble
+        idleMinutes = try c.decodeIfPresent(Double.self, forKey: .idleMinutes) ?? d.idleMinutes
+        doubleTapOption = try c.decodeIfPresent(Bool.self, forKey: .doubleTapOption) ?? d.doubleTapOption
+    }
 
     static let key = "orb.settings"
 

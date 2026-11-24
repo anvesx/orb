@@ -6,11 +6,15 @@
 /// preparing or connecting is pending: when the key is still held at the join, the mic opens then; when it was
 /// released before, nothing is sent and the call stays up for the next press. The call stays up (warm) until no one
 /// has spoken for the idle timeout.
+///
+/// Hands-free (a double tap of ⌥): the mic stays open without a key; the model's own turn detection decides when you
+/// finished. Another double tap closes it. A hands-free call also ends after the idle timeout with no speech.
 public enum CallPhase: Equatable, Sendable { case idle, preparing, connecting, live }
 
 public struct CallState: Equatable, Sendable {
     public var phase: CallPhase = .idle
     public var keyDown = false
+    public var handsFree = false
     public var micOn = false
     public var agent: AgentState?
     public var agentJoined = false
@@ -21,7 +25,7 @@ public struct CallState: Equatable, Sendable {
 }
 
 public enum CallEvent: Equatable, Sendable {
-    case talkDown, talkUp, tailElapsed
+    case talkDown, talkUp, tailElapsed, toggleHandsFree
     case prepared(VoiceToken), prepareFailed(String)
     case joined, connectFailed(String)
     case agentJoined, agentState(AgentState), agentJoinTimeout
@@ -47,11 +51,22 @@ public enum CallMachine {
     public static func reduce(_ s: CallState, _ event: CallEvent) -> (CallState, [CallEffect]) {
         var s = s
         switch (s.phase, event) {
-        case (.idle, .talkDown):
+        case (.idle, .talkDown), (.idle, .toggleHandsFree):
+            let handsFree = event == .toggleHandsFree
             s = CallState()
             s.phase = .preparing
-            s.keyDown = true
+            s.keyDown = !handsFree
+            s.handsFree = handsFree
             return (s, [.prepare])
+        case (.live, .toggleHandsFree):
+            s.handsFree.toggle()
+            let mic = s.handsFree || s.keyDown
+            guard mic != s.micOn else { return (s, []) }
+            s.micOn = mic
+            return (s, [.setMic(mic), .restartIdleTimer])
+        case (_, .toggleHandsFree):  // preparing or connecting: decided at the join
+            s.handsFree.toggle()
+            return (s, [])
         case (_, .talkDown):
             s.keyDown = true
             guard s.phase == .live, !s.micOn else { return (s, []) }  // pending, or the tail is still open
@@ -59,9 +74,9 @@ public enum CallMachine {
             return (s, [.setMic(true), .restartIdleTimer])
         case (_, .talkUp):
             s.keyDown = false
-            return (s, s.phase == .live && s.micOn ? [.startTail] : [])
+            return (s, s.phase == .live && s.micOn && !s.handsFree ? [.startTail] : [])
         case (.live, .tailElapsed):
-            guard !s.keyDown, s.micOn else { return (s, []) }
+            guard !s.keyDown, !s.handsFree, s.micOn else { return (s, []) }
             s.micOn = false
             return (s, [.setMic(false), .restartIdleTimer])
 
@@ -72,7 +87,7 @@ public enum CallMachine {
             return (ended(why), [])
         case (.connecting, .joined):
             s.phase = .live
-            s.micOn = s.keyDown
+            s.micOn = s.keyDown || s.handsFree
             return (s, (s.micOn ? [.setMic(true)] : []) + [.startAgentJoinTimer, .restartIdleTimer])
 
         case (.live, .agentJoined):
@@ -88,7 +103,8 @@ public enum CallMachine {
         case (.live, .youSpeaking):
             return (s, [.restartIdleTimer])
         case (.live, .idleTimeout):
-            if s.keyDown || s.micOn || s.agent == .speaking || s.agent == .thinking { return (s, [.restartIdleTimer]) }
+            let busy = s.keyDown || (s.micOn && !s.handsFree) || s.agent == .speaking || s.agent == .thinking
+            if busy { return (s, [.restartIdleTimer]) }
             return (ended(nil), [.disconnect])
         case (.live, .reconnecting):
             s.reconnecting = true

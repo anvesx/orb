@@ -12,6 +12,11 @@ make mac-test     # the unit tests (no network, no microphone)
 
 - **Talk:** hold ⌥ Space (or press and hold *Hold to talk* in the panel). The first press connects (a few seconds);
   the call then stays up for 3 minutes after anyone last spoke, so the next press is instant.
+- **Hands-free:** double-tap ⌥ (or click *Hands-free* in the panel) and talk without holding a key; Gemini decides
+  when you finished, and you can talk over orb. Double-tap ⌥ again to stop. macOS shows a lone ⌥ tap to an app only
+  with the Accessibility permission, so orb asks for it once (Settings can switch the double tap off).
+- **Ready vs Listening:** "Listening" means the microphone is open and orb hears you; between presses the call is
+  "Ready" (the microphone is closed).
 - **Panel:** click the island or press ⌥⇧Space. *Add* offers the folders on your Desktop, or any files and folders.
 - **Companion:** during a call a small orb follows your pointer and shows orb's words. Switch it off in Settings.
 - **Inspector** (menu bar › Inspector, or the split button in the panel): the conversation, the next move and persona,

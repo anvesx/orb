@@ -37,6 +37,7 @@ public struct SettingsView<Shortcut: View>: View {
             }
             Section("Talk") {
                 LabeledContent("Hold to talk") { shortcut }
+                Toggle("Double-tap ⌥ to talk hands-free", isOn: $model.settings.doubleTapOption)
                 Stepper(value: $model.settings.idleMinutes, in: 1...15, step: 1) {
                     LabeledContent("Keep the call up after the last word", value: "\(Int(model.settings.idleMinutes)) min")
                 }

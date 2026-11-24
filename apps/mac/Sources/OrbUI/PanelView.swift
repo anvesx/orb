@@ -23,6 +23,8 @@ struct PanelView: View {
             ContextView(model: model, pickFiles: actions.pickFiles)
             if let warning = model.warning {
                 WarningView(text: warning)
+            } else if let blocked = model.doubleTapBlocked, model.settings.doubleTapOption {
+                WarningView(text: blocked)
             }
             footer
         }
@@ -55,13 +57,20 @@ struct PanelView: View {
     func stateLine(_ mood: Mood) -> String {
         if model.call.reconnecting { return "Reconnecting…" }
         if mood == .idle { return model.sessionID == nil ? "Ready" : "Ready · the call ended" }
-        if mood == .listening && model.call.micOn { return model.youSpeaking ? "Hearing you…" : "Speak now" }
+        if mood == .ready { return "Ready · hold \(model.talkShortcut)" + (model.doubleTapBlocked == nil ? " or double-tap ⌥" : "") }
+        if model.call.handsFree && mood == .listening { return model.youSpeaking ? "Hearing you… · hands-free" : "Hands-free · double-tap ⌥ to stop" }
+        if mood == .listening { return model.youSpeaking ? "Hearing you…" : "Speak now" }
         return mood.words
     }
 
     var footer: some View {
         HStack(spacing: 10) {
             TalkButton(model: model, shortcut: model.talkShortcut)
+            Button { model.toggleHandsFree() } label: {
+                Label("Hands-free", systemImage: model.call.handsFree ? "waveform.circle.fill" : "waveform.circle")
+            }
+            .buttonStyle(PillStyle(tint: model.call.handsFree ? Theme.listen : Theme.ink2))
+            .help("Listen without holding a key (double-tap ⌥)")
             Spacer()
             if model.call.phase != .idle {
                 Button("Hang up") { model.hangUp() }

@@ -18,6 +18,16 @@ live. Hold to talk: key down opens the microphone; key up starts a 300 ms tail. 
 opens the microphone at the join only if the key is still held. The call ends after `idleMinutes` (3) with no speech,
 on hang up, on a new session or a change of context, or when the room disconnects.
 
+**Hands-free:** `toggleHandsFree` (a double tap of ⌥, or the panel's button) starts a call with the microphone open
+and no key held, or opens and closes the microphone of a live call. The key's release does not close a hands-free
+microphone; the model's turn detection ends each turn. A silent hands-free call ends after the idle timeout too.
+`DoubleTap` (pure) counts two taps of ⌥ alone, each 0.3 s or shorter, the second within 0.4 s, with no other key
+between; `OptionTap` (the app) feeds it from global and local `flagsChanged`/`keyDown` monitors, which macOS delivers
+only with the Accessibility permission (asked once; until then the panel says why).
+
+**Mood:** "listening" only while the microphone is open; a live call with a closed microphone is "ready", whatever
+the agent's own state says.
+
 | Warning | When |
 |---|---|
 | "Voice is off…" | `/v1/voice/status` is null |
@@ -78,4 +88,5 @@ then signs the frameworks and the app. SwiftPM's resource accessor looks for bun
 | `AgentClientTests` | bodies and paths against a stub `URLProtocol`, the service's error text, 404, no answer, unchanged state |
 | `VoiceTests` | agent state aliases, caption segment rules and polish, bench event decoding, the level smoother |
 | `InspectorTests` | `EngineView` on a real state of the service (`Fixtures/session-state.json`, one note and one reply), a state without engine fields, the turn log's rows |
+| `HandsFreeTests`, `DoubleTapTests` | hands-free start, stop, key presses that leave it open, the idle timeout, a toggle while connecting; quick, slow and interrupted taps |
 | `AppModelTests` | a press makes a session with the context's sources and opens the mic; a forgotten session is made again; a blocked voice says why; a change of context ends the session |

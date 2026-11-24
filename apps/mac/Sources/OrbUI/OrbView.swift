@@ -15,7 +15,7 @@ public struct OrbView: View {
     }
 
     public var body: some View {
-        TimelineView(.animation(minimumInterval: mood == .idle ? 1.0 / 15 : nil)) { timeline in
+        TimelineView(.animation(minimumInterval: mood == .idle || mood == .ready ? 1.0 / 15 : nil)) { timeline in
             Canvas { ctx, size in
                 let look = motion.step(to: mood, level: level(), at: timeline.date, slow: reduceMotion)
                 draw(look, in: &ctx, size: size)
@@ -81,6 +81,7 @@ final class OrbMotion {
     static func mix(_ mood: Mood) -> ([CGFloat], Double, Bool) {
         switch mood {
         case .idle: ([0.4, 0.55, 0.35, 0.2, 0.3], 0.3, false)
+        case .ready: ([0.6, 0.6, 0.3, 0.2, 0.1], 0.6, false)
         case .connecting: ([0.45, 0.8, 0.1, 0.05, 0.2], 0.8, true)
         case .listening: ([1, 0.4, 0.12, 0.08, 0], 1.2, false)
         case .thinking: ([0.25, 1, 0.3, 0.1, 0], 1.8, true)
