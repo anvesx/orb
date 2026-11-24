@@ -5,7 +5,7 @@ CONDA   ?= $(HOME)/miniconda3/bin/conda
 export NEEDLE_TELEMETRY := 0
 export JEV_ENV_FILE ?= $(HOME)/jev-test/.env
 
-.PHONY: help setup brew env models test test-py dev dev-text dev-gemini e2e check bench replay
+.PHONY: help setup brew env models test test-py dev dev-text dev-gemini mac mac-run mac-test e2e check bench replay
 
 help:
 	@echo "make setup    install system libraries, the conda env and the speech models (once)"
@@ -13,6 +13,7 @@ help:
 	@echo "make dev      start every service; then open http://127.0.0.1:8100"
 	@echo "make dev-text start only the agent service and Ollama (no voice)"
 	@echo "make dev-gemini start LiveKit, the agent service and the voice worker for Gemini Live only (no local models)"
+	@echo "make mac     build the Mac app into apps/mac/build/orb.app (make mac-run: build and open it; make mac-test: its tests)"
 	@echo "make e2e      the end-to-end voice test (needs 'make dev' in another terminal and an LLM for replies)"
 	@echo "make check    start the whole stack, test it, and stop it (about 2 minutes; --quick: 1 minute)"
 	@echo "make bench    build the git-ignored test audio, then open http://127.0.0.1:8100/bench"
@@ -51,6 +52,15 @@ dev-text:
 
 dev-gemini:
 	scripts/dev.sh --gemini --no-tunnel
+
+mac:
+	apps/mac/scripts/build_app.sh
+
+mac-run:
+	apps/mac/scripts/build_app.sh --open
+
+mac-test:
+	cd apps/mac && swift test
 
 e2e:
 	$(PY) scripts/e2e_voice.py
