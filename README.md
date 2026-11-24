@@ -6,6 +6,8 @@ company's own documents; the [roadmap](docs/roadmap.md) builds it one feature pe
 
 **Iteration 0 (2026-10-21)** ships the foundation: the discussion agent, which does not just agree, in text and
 in local voice. **On 2026-10-22** the voice worker moved to LiveKit Agents, and a bench now measures every model.
+**Next (2026-11-24):** a native Mac app, where you talk with orb about the files of a Desktop folder
+([design](docs/design/mac-app.md)). A session can now hold those files' text (`sources`, decision 0020).
 
 ## How it fits together
 ```
@@ -48,6 +50,7 @@ that writes the reply:
 make setup      # Homebrew (LiveKit, Ollama, ffmpeg), the `orb` conda env, the speech models (once)
 make test       # 189 tests, no network, no API cost
 make dev        # every service; open http://127.0.0.1:8100: the voice call (an orb) and the bench tools are tabs of one page
+make dev-gemini # Gemini Live only: LiveKit, the agent service and the voice worker, no local models
 make e2e        # in a second terminal: a synthetic person talks to the voice agent
 make check      # start every service, test them (unit, live and voice end to end), and stop them: about 4 minutes
 make bench      # the git-ignored test audio for the bench (once)
