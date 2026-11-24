@@ -17,14 +17,18 @@ final class Shell {
     let island: IslandWindow
     let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     let files = FilesProvider()
+    var companion: CompanionOverlay?
+    var windows: [String: NSWindow] = [:]
 
     init() {
         model = AppModel(transport: LiveKitTransport(), providers: [files])
         island = IslandWindow()
         island.show(IslandRoot(model: model, island: island, actions: PanelActions(
             pickFiles: { [weak self] in self?.pickFiles() },
-            openSettings: { NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) },
-            talkShortcut: Self.label(KeyboardShortcuts.getShortcut(for: .talk)))))
+            openSettings: { [weak self] in self?.showSettings() },
+            openInspector: { [weak self] in self?.showInspector() })))
+        model.talkShortcut = Self.label(KeyboardShortcuts.getShortcut(for: .talk))
+        companion = CompanionOverlay(model: model)
         setUpStatusItem()
         KeyboardShortcuts.onKeyDown(for: .talk) { [weak self] in self?.model.talkDown() }
         KeyboardShortcuts.onKeyUp(for: .talk) { [weak self] in self?.model.talkUp() }
@@ -53,9 +57,40 @@ final class Shell {
         statusItem.button?.setAccessibilityLabel("orb")
         let menu = NSMenu()
         menu.addItem(withTitle: "Open orb", action: #selector(IslandWindow.toggle), keyEquivalent: "").target = island
+        menu.addItem(withTitle: "Inspector", action: #selector(showInspector), keyEquivalent: "i").target = self
+        menu.addItem(withTitle: "Settings…", action: #selector(showSettings), keyEquivalent: ",").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit orb", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
+    }
+
+    @objc func showSettings() {
+        show("settings", title: "orb Settings", SettingsView(model: model) {
+            ShortcutRecorder(name: .talk) { [weak self] in self?.model.talkShortcut = $0 }
+        })
+    }
+
+    @objc func showInspector() {
+        show("inspector", title: "orb Inspector", InspectorView(model: model).frame(minWidth: 860, minHeight: 560))
+    }
+
+    /// One window per id: shown again if it exists, made once otherwise.
+    func show<V: View>(_ id: String, title: String, _ view: V) {
+        island.expanded = false
+        NSApp.activate()
+        if let window = windows[id] {
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+        let window = NSWindow(contentViewController: NSHostingController(rootView: view))
+        window.title = title
+        window.isReleasedWhenClosed = false
+        window.center()
+        if let screen = window.screen ?? NSScreen.main {  // below the island, which covers the top of the screen
+            window.setFrameTopLeftPoint(NSPoint(x: window.frame.minX, y: min(window.frame.maxY, screen.visibleFrame.maxY - 90)))
+        }
+        window.makeKeyAndOrderFront(nil)
+        windows[id] = window
     }
 
     func pickFiles() {

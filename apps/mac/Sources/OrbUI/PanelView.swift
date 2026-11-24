@@ -19,7 +19,7 @@ struct PanelView: View {
                     .accessibilityAddTraits(.updatesFrequently)
             }
             .frame(maxWidth: .infinity)
-            CaptionsView(captions: model.captions, hint: "Hold \(actions.talkShortcut) and talk.")
+            CaptionsView(captions: model.captions, hint: "Hold \(model.talkShortcut) and talk.")
             ContextView(model: model, pickFiles: actions.pickFiles)
             if let warning = model.warning {
                 WarningView(text: warning)
@@ -39,6 +39,11 @@ struct PanelView: View {
             Text("orb").font(Theme.wordmark).foregroundStyle(Theme.ink)
             Spacer()
             ServiceDot(up: model.serviceUp)
+            Button(action: actions.openInspector) {
+                Image(systemName: "rectangle.split.2x1").font(.system(size: 13)).foregroundStyle(Theme.ink2)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Inspector")
             Button(action: actions.openSettings) {
                 Image(systemName: "gearshape").font(.system(size: 13)).foregroundStyle(Theme.ink2)
             }
@@ -56,7 +61,7 @@ struct PanelView: View {
 
     var footer: some View {
         HStack(spacing: 10) {
-            TalkButton(model: model, shortcut: actions.talkShortcut)
+            TalkButton(model: model, shortcut: model.talkShortcut)
             Spacer()
             if model.call.phase != .idle {
                 Button("Hang up") { model.hangUp() }

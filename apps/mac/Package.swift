@@ -21,6 +21,6 @@ let package = Package(
         .target(name: "OrbUI", dependencies: ["OrbKit"]),
         .executableTarget(name: "OrbApp", dependencies: ["OrbKit", "OrbVoice", "OrbUI", "KeyboardShortcuts"]),
         .executableTarget(name: "OrbProbe", dependencies: ["OrbKit", "OrbVoice"]),
-        .testTarget(name: "OrbKitTests", dependencies: ["OrbKit"]),
+        .testTarget(name: "OrbKitTests", dependencies: ["OrbKit"], resources: [.copy("Fixtures")]),
     ]
 )

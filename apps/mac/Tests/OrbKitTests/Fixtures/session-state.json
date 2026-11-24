@@ -1,0 +1,427 @@
+{
+ "id": "20261124-084138-e88da3",
+ "agent": "discussion",
+ "topic": "Should we store passwords in a JSON file?",
+ "title": "Should we store passwords in a JSON file?",
+ "version": 4,
+ "source": {},
+ "sources": [],
+ "messages": [
+  {
+   "seq": 0,
+   "id": "M1",
+   "speaker": "human",
+   "text": "We should store user passwords in a plain JSON file because it is simple.",
+   "channel": "voice",
+   "interrupted": false,
+   "time": 1795489899.2507908
+  },
+  {
+   "seq": 1,
+   "id": "M2",
+   "speaker": "ai",
+   "text": "Why is simple worth the risk? A leak would expose every password.",
+   "channel": "voice",
+   "interrupted": false,
+   "time": 1795489899.266651
+  }
+ ],
+ "turns": [
+  {
+   "human": 0,
+   "channel": "voice",
+   "read": {
+    "id": "M1",
+    "speaker": "human",
+    "stage": "Open",
+    "stage_why": "1 option on the table. Test starts at 2.",
+    "events": [
+     {
+      "type": "option",
+      "option": "O1",
+      "rule": "M1 puts a new option on the table.",
+      "q": "new_option",
+      "p": 0.98
+     },
+     {
+      "type": "start",
+      "debt": "D1",
+      "rule": "The person gives a reason, so the AI owes a fair reply to it.",
+      "q": "gives_reason",
+      "p": 0.94
+     },
+     {
+      "type": "start",
+      "debt": "D2",
+      "rule": "Only one option is on the table, so a second option is owed.",
+      "q": "new_option",
+      "p": 0.98
+     }
+    ],
+    "error": null,
+    "seconds": 0.68,
+    "tokens": 1155,
+    "model": "jev-1.14.0",
+    "questions": [
+     {
+      "name": "asks",
+      "group": "message",
+      "label": "asks a question",
+      "debt": null,
+      "answer": 0.05,
+      "yes": false
+     },
+     {
+      "name": "claims",
+      "group": "message",
+      "label": "makes a claim",
+      "debt": null,
+      "answer": 0.99,
+      "yes": true
+     },
+     {
+      "name": "gives_reason",
+      "group": "message",
+      "label": "gives a reason",
+      "debt": null,
+      "answer": 0.94,
+      "yes": true
+     },
+     {
+      "name": "repeats",
+      "group": "message",
+      "label": "repeats an old point",
+      "debt": null,
+      "answer": 0.02,
+      "yes": false
+     },
+     {
+      "name": "changes_view",
+      "group": "message",
+      "label": "changes view",
+      "debt": null,
+      "answer": 0.01,
+      "yes": false
+     },
+     {
+      "name": "asks_to_close",
+      "group": "message",
+      "label": "asks to close",
+      "debt": null,
+      "answer": 0.12,
+      "yes": false
+     },
+     {
+      "name": "disagrees",
+      "group": "message",
+      "label": "disagrees",
+      "debt": null,
+      "answer": 0.02,
+      "yes": false
+     },
+     {
+      "name": "new_option",
+      "group": "message",
+      "label": "puts a new option on the table",
+      "debt": null,
+      "answer": 0.98,
+      "yes": true
+     },
+     {
+      "name": "names_open_point",
+      "group": "message",
+      "label": "names an open point",
+      "debt": null,
+      "answer": 0.13,
+      "yes": false
+     }
+    ]
+   },
+   "need": {
+    "debt": "D2",
+    "kind": "option",
+    "promise": "Divergence",
+    "persona": "Rival",
+    "move": "Offer a second option, with one concrete reason.",
+    "why": "D2 is due, and the newest message started it."
+   },
+   "timing": {
+    "read_human": 0.68,
+    "read_ai": 0.37
+   },
+   "decision": {
+    "persona": "Rival",
+    "name": "The Rival",
+    "temperature": 0.8,
+    "debt": "D2",
+    "kind": "option",
+    "promise": "Divergence",
+    "move": "Offer a second option, with one concrete reason.",
+    "why": "D2 is due, and the newest message started it.",
+    "stage": "Open",
+    "note": "This note is for your next reply only. The person does not see it. Never mention the note, the persona, the job or the stage.\nPersona: The Rival. You argue for the strongest option that is different from the person's view. Be fair. Give one concrete reason.\nYour job now: Offer a second option, with one concrete reason.\nWhy: Only one option is on the table: \"We should store user passwords in a plain JSON file because it is simple.\".\nStage of the discussion: Open. Collect options. Do not test them yet.\nLength: 1 to 3 short sentences. Ask at most one question.\nNow reply to the person. Write only the words that you say to them."
+   },
+   "ai": 1,
+   "ai_read": {
+    "id": "M2",
+    "speaker": "ai",
+    "stage": "Open",
+    "stage_why": "1 option on the table. Test starts at 2.",
+    "events": [
+     {
+      "type": "pay",
+      "debt": "D1",
+      "rule": "Jev says that M2 pays D1.",
+      "q": "pays_D1",
+      "p": 0.9
+     },
+     {
+      "type": "start",
+      "debt": "D3",
+      "rule": "The AI asks a question, so the person owes an answer.",
+      "q": "asks",
+      "p": 0.65
+     },
+     {
+      "type": "start",
+      "debt": "D4",
+      "rule": "A disagreement starts, so it must end before the talk closes.",
+      "q": "disagrees",
+      "p": 0.94
+     }
+    ],
+    "error": null,
+    "seconds": 0.37,
+    "tokens": 905,
+    "model": "jev-1.14.0",
+    "questions": [
+     {
+      "name": "asks",
+      "group": "message",
+      "label": "asks a question",
+      "debt": null,
+      "answer": 0.65,
+      "yes": true
+     },
+     {
+      "name": "disagrees",
+      "group": "message",
+      "label": "disagrees",
+      "debt": null,
+      "answer": 0.94,
+      "yes": true
+     },
+     {
+      "name": "new_option",
+      "group": "message",
+      "label": "puts a new option on the table",
+      "debt": null,
+      "answer": 0.05,
+      "yes": false
+     },
+     {
+      "name": "names_open_point",
+      "group": "message",
+      "label": "names an open point",
+      "debt": null,
+      "answer": 0.31,
+      "yes": false
+     },
+     {
+      "name": "pays_D1",
+      "group": "pay",
+      "label": "pays D1",
+      "debt": "D1",
+      "answer": 0.9,
+      "yes": true
+     }
+    ]
+   },
+   "check": {
+    "debt": "D2",
+    "persona": "Rival",
+    "q": null,
+    "p": null,
+    "done": false,
+    "text": "The Rival had to pay D2. It did not."
+   }
+  }
+ ],
+ "stage": "Open",
+ "stage_why": "1 option on the table. Test starts at 2.",
+ "options": [
+  {
+   "id": "O1",
+   "from": "M1",
+   "text": "We should store user passwords in a plain JSON file because it is simple."
+  }
+ ],
+ "scores": {
+  "Interaction": {
+   "owed": 1,
+   "paid": 0,
+   "due": true
+  },
+  "Divergence": {
+   "owed": 1,
+   "paid": 0,
+   "due": true
+  },
+  "Challenge": {
+   "owed": 0,
+   "paid": 0,
+   "due": false
+  },
+  "Reflection": {
+   "owed": 1,
+   "paid": 1,
+   "due": false
+  },
+  "Progression": {
+   "owed": 0,
+   "paid": 0,
+   "due": false
+  },
+  "Resolution": {
+   "owed": 1,
+   "paid": 0,
+   "due": false
+  }
+ },
+ "board": [
+  {
+   "id": "D1",
+   "kind": "weigh",
+   "owner": "ai",
+   "start": 0,
+   "about": "M1 (human) gives a reason. The ai owes a fair reply to that reason.",
+   "rule": "The person gives a reason, so the AI owes a fair reply to it.",
+   "paid": 1,
+   "paid_by": "pays_D1",
+   "paid_p": 0.9,
+   "promise": "Reflection",
+   "status": "paid"
+  },
+  {
+   "id": "D2",
+   "kind": "option",
+   "owner": "ai",
+   "start": 0,
+   "about": "Only one option is on the table. The ai owes a second option.",
+   "rule": "Only one option is on the table, so a second option is owed.",
+   "paid": null,
+   "paid_by": null,
+   "paid_p": null,
+   "promise": "Divergence",
+   "status": "due"
+  },
+  {
+   "id": "D3",
+   "kind": "answer",
+   "owner": "human",
+   "start": 1,
+   "about": "M2 (ai) asks a question. The human owes an answer.",
+   "rule": "The AI asks a question, so the person owes an answer.",
+   "paid": null,
+   "paid_by": null,
+   "paid_p": null,
+   "promise": "Interaction",
+   "status": "due"
+  },
+  {
+   "id": "D4",
+   "kind": "end",
+   "owner": "both",
+   "start": 1,
+   "about": "M2 (ai) disagrees with the human. The disagreement must end.",
+   "rule": "A disagreement starts, so it must end before the talk closes.",
+   "paid": null,
+   "paid_by": null,
+   "paid_p": null,
+   "promise": "Resolution",
+   "status": "waiting"
+  }
+ ],
+ "need": null,
+ "last_call": {
+  "id": "M2",
+  "speaker": "ai",
+  "stage": "Open",
+  "stage_why": "1 option on the table. Test starts at 2.",
+  "events": [
+   {
+    "type": "pay",
+    "debt": "D1",
+    "rule": "Jev says that M2 pays D1.",
+    "q": "pays_D1",
+    "p": 0.9
+   },
+   {
+    "type": "start",
+    "debt": "D3",
+    "rule": "The AI asks a question, so the person owes an answer.",
+    "q": "asks",
+    "p": 0.65
+   },
+   {
+    "type": "start",
+    "debt": "D4",
+    "rule": "A disagreement starts, so it must end before the talk closes.",
+    "q": "disagrees",
+    "p": 0.94
+   }
+  ],
+  "error": null,
+  "seconds": 0.37,
+  "tokens": 905,
+  "model": "jev-1.14.0",
+  "questions": [
+   {
+    "name": "asks",
+    "group": "message",
+    "label": "asks a question",
+    "debt": null,
+    "answer": 0.65,
+    "yes": true
+   },
+   {
+    "name": "disagrees",
+    "group": "message",
+    "label": "disagrees",
+    "debt": null,
+    "answer": 0.94,
+    "yes": true
+   },
+   {
+    "name": "new_option",
+    "group": "message",
+    "label": "puts a new option on the table",
+    "debt": null,
+    "answer": 0.05,
+    "yes": false
+   },
+   {
+    "name": "names_open_point",
+    "group": "message",
+    "label": "names an open point",
+    "debt": null,
+    "answer": 0.31,
+    "yes": false
+   },
+   {
+    "name": "pays_D1",
+    "group": "pay",
+    "label": "pays D1",
+    "debt": "D1",
+    "answer": 0.9,
+    "yes": true
+   }
+  ]
+ },
+ "tokens": 2060,
+ "cost_usd": 8.7e-05,
+ "busy": false,
+ "config": {
+  "voice_mode": "gemini-live"
+ }
+}
