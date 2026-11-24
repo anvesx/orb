@@ -9,10 +9,9 @@ func tempFolder() throws -> URL {
     return url
 }
 
-func write(_ text: String, _ name: String, in folder: URL, age: TimeInterval = 0) throws -> URL {
+func write(_ text: String, _ name: String, in folder: URL) throws -> URL {
     let url = folder.appending(path: name)
     try text.write(to: url, atomically: true, encoding: .utf8)
-    try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -age)], ofItemAtPath: url.path)
     return url
 }
 
@@ -60,36 +59,5 @@ func makePDF(_ text: String, at url: URL) {
                      documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]).write(to: rtf)
         #expect(Extractor.source(of: docx)?.text == "Launch on the third of March.")
         #expect(Extractor.source(of: rtf)?.kind == .document)
-    }
-}
-
-@Suite struct FilesProviderTests {
-    @Test func aFolderGivesItsReadableFilesNewestFirstWithoutSubfoldersOrHiddenFiles() async throws {
-        let dir = try tempFolder()
-        _ = try write("old", "old.md", in: dir, age: 100)
-        _ = try write("new", "new.txt", in: dir)
-        _ = try write("secret", ".hidden.md", in: dir)
-        _ = try write("binary", "photo.heic", in: dir)
-        try FileManager.default.createDirectory(at: dir.appending(path: "sub"), withIntermediateDirectories: true)
-        _ = try write("deep", "deep.md", in: dir.appending(path: "sub"))
-        let files = FilesProvider(desktop: dir)
-        #expect(FilesProvider.files(in: dir).map(\.lastPathComponent) == ["new.txt", "old.md"])
-        let sources = await files.sources(for: [files.item(for: dir)])
-        #expect(sources.map(\.name) == ["new.txt", "old.md"])
-    }
-
-    @Test func theDesktopSuggestsItsFolders() async throws {
-        let desktop = try tempFolder()
-        try FileManager.default.createDirectory(at: desktop.appending(path: "Notes"), withIntermediateDirectories: true)
-        _ = try write("x", "loose.md", in: desktop)
-        let items = await FilesProvider(desktop: desktop).suggestions()
-        #expect(items.map(\.title) == ["Notes"] && items[0].provider == "files" && items[0].id.hasPrefix("files:"))
-    }
-
-    @Test func sourcesStopAtTheRequestLimits() {
-        let big = String(repeating: "x", count: 200_000)
-        let packed = SourcePack.fit((0..<5).map { Source(name: "f\($0).md", kind: .markdown, text: big) } + [Source(name: "e.md", kind: .markdown, text: "")])
-        #expect(packed.map(\.text.count) == [150_000, 150_000, 150_000, 50_000])
-        #expect(SourcePack.fit((0..<120).map { Source(name: "\($0)", kind: .text, text: "a") }).count == 100)
     }
 }

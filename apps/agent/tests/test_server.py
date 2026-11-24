@@ -485,7 +485,7 @@ def test_a_reader_failure_on_a_note_is_a_502(tmp_path):
 
 def test_the_gemini_switches_are_kept_and_the_personas_model_is_checked_as_a_whole(tmp_path):
     c, _ = gemini_app(tmp_path)
-    cfg = {"voice_mode": "gemini-live", "gemini_personas": True, "gemini_search": True}
+    cfg = {"voice_mode": "gemini-live", "gemini_personas": True, "gemini_search": True, "gemini_screen": True}
     sid = c.post("/v1/sessions", json={"topic": "T", "config": cfg}).json()["id"]
     assert c.get(f"/v1/sessions/{sid}").json()["config"] == cfg
     r = c.put(f"/v1/sessions/{sid}/config", json={"gemini_model": "gemini-3.8-live-extended-thinking"})

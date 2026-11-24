@@ -1,6 +1,9 @@
 import AVFoundation
 import LiveKit
 import OrbKit
+import os
+
+let trace = Logger(subsystem: "ai.anvesx.orb", category: "call")
 
 /// One voice call over LiveKit: the native form of the web page's `talk()`. The room, the muted microphone, the
 /// agent's state, the captions (text streams on `lk.transcription`), the worker's events (data on `orb.bench`) and
@@ -9,11 +12,14 @@ public actor LiveKitTransport: VoiceTransport {
     public nonisolated let levels = AudioLevels()
     var room: Room?
     var silence: Task<Void, Never>?
+    var screen: LocalVideoTrack?
     /// After a release the track sends silence this long before it mutes: a muted track sends nothing, and the model's
     /// turn detection (700 ms of silence, gemini_live.py) would wait for an end of the turn that never comes.
     static let endOfTurnSilence: Duration = .milliseconds(1200)
 
-    public init() {}
+    public init() {
+        TestVoice.install()
+    }
 
     public func connect(url: String, token: String) async throws -> AsyncStream<VoiceEvent> {
         await disconnect()
@@ -51,8 +57,41 @@ public actor LiveKitTransport: VoiceTransport {
         }
     }
 
+    public func serve(_ method: String, _ handler: @escaping @Sendable (String) async -> String) async {
+        do {
+            try await room?.registerRpcMethod(method) { await handler($0.payload) }
+        } catch {
+            trace.error("RPC \(method, privacy: .public) not served: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// A screen-share track fed by the app's own frames (mac-screen.md section 3): about 1 frame/s, no simulcast.
+    public func startScreen() async -> ScreenSink? {
+        guard let room, screen == nil else { return nil }
+        let track = await LocalVideoTrack.createBufferTrack(
+            name: "orb-screen", source: .screenShareVideo,
+            options: BufferCaptureOptions(dimensions: Dimensions(width: 1920, height: 1200), fps: 2))
+        let options = VideoPublishOptions(name: "orb-screen",
+                                          screenShareEncoding: VideoEncoding(maxBitrate: 2_500_000, maxFps: 2),
+                                          simulcast: false)
+        guard let capturer = track.capturer as? BufferCapturer else { return nil }
+        screen = track
+        // the publish waits for the track's size, which comes with its first frame: the frames must flow first
+        Task {
+            do {
+                _ = try await room.localParticipant.publish(videoTrack: track, options: options)
+                trace.debug("screen track published")
+            } catch {
+                trace.error("screen track not published: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        return { capturer.capture($0) }
+    }
+
     public func disconnect() async {
         silence?.cancel()
+        try? await screen?.stop()
+        screen = nil
         await room?.disconnect()
         room = nil
         levels.set(you: 0)

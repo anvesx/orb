@@ -13,8 +13,6 @@ public enum Theme {
     public static let speak2 = Color(hex: 0xFFB547)
     public static let idle = Color(hex: 0x5B5B6B)
     public static let alert = Color(hex: 0xFF4D5E)
-    /// The hues of context chips, chosen by a hash of the item's name.
-    public static let hues: [Color] = [listen, think, speak, speak2, Color(hex: 0x38BDF8), Color(hex: 0xA3E635)]
 
     public static let body = Font.system(size: 13)
     public static let caption = Font.system(size: 15)
@@ -26,10 +24,6 @@ public enum Theme {
     public static let panelRadius: CGFloat = 14
     public static let rowRadius: CGFloat = 10
     public static let panelWidth: CGFloat = 380
-
-    public static func hue(for name: String) -> Color {
-        hues[Int(name.unicodeScalars.reduce(UInt32(7)) { $0 &* 31 &+ $1.value } % UInt32(hues.count))]
-    }
 }
 
 extension Color {

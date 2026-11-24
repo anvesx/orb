@@ -16,7 +16,7 @@ public struct SettingsView<Shortcut: View>: View {
             Section("Service") {
                 TextField("Agent service", text: $model.settings.serviceURL)
                     .onSubmit { model.refresh() }
-                ServiceDot(up: model.serviceUp)
+                LabeledContent("Status", value: model.serviceUp == true ? "Running" : model.serviceUp == false ? "Not running" : "Checking…")
             }
             Section {
                 Picker("Model", selection: $model.settings.geminiModel) {
@@ -28,11 +28,19 @@ public struct SettingsView<Shortcut: View>: View {
                     ForEach(model.gemini?.voices ?? [], id: \.self) { Text($0).tag(String?.some($0)) }
                 }
                 Toggle("orb personas", isOn: $model.settings.personas)
-                Toggle("Google Search", isOn: $model.settings.search)
+                Toggle("Google Search", isOn: $model.settings.webSearch)
             } header: {
                 Text("Voice (Gemini Live)")
             } footer: {
                 Text("orb personas: before each reply, Jev reads what you said and orb's rules choose the role Gemini speaks in. A change applies from the next call.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle("Let orb see my screen during a call", isOn: $model.settings.screen)
+            } header: {
+                Text("Screen")
+            } footer: {
+                Text("During a call orb sees the display under your pointer, reads its text when you ask, and points at what it explains. The screen goes to Gemini, like your voice; nothing is shared outside a call.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Talk") {

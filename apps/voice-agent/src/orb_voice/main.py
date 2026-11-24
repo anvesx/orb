@@ -20,7 +20,8 @@ from pathlib import Path
 
 import httpx
 from livekit import agents, rtc
-from livekit.agents import Agent, AgentServer, AgentSession, APIConnectOptions, JobContext, JobProcess, inference
+from livekit.agents import (NOT_GIVEN, Agent, AgentServer, AgentSession, APIConnectOptions, JobContext, JobProcess,
+                            inference, room_io)
 from livekit.agents import telemetry as lk_telemetry
 from livekit.agents import tts as lk_tts
 from livekit.agents.voice.agent_session import SessionConnectOptions
@@ -31,6 +32,7 @@ from orb_core.rooms import session_for
 from orb_voice import gemini_live
 from orb_voice.config import Settings, check_livekit, load_repo_env
 from orb_voice.gemini_turns import GeminiTurns
+from orb_voice.screen_tools import ScreenTools
 from orb_voice.plugins import (FirstClauseTokenizer, LiveSTT, OrbLLM, OrbSTT, OrbTTS, TurnTracker, polish_text,
                                stt_engines_info)
 
@@ -303,7 +305,9 @@ async def gemini_call(ctx: JobContext, http: httpx.AsyncClient, s: Settings, sid
         bench.send("error", error=gemini_live.explain(e))
         return
     watch(session, bench, sid, s)
-    tools = gemini_live.provider_tools(cfg) + ([turns.tool()] if turns.personas else [])
+    screen = ScreenTools(ctx.room, sid, bench, s.log_text) if cfg.get("gemini_screen") else None
+    tools = (gemini_live.provider_tools(cfg) + ([turns.tool()] if turns.personas else [])
+             + (screen.tools() if screen else []))
     drains.append(turns.drain)
 
     @session.on("user_input_transcribed")
@@ -332,10 +336,12 @@ async def gemini_call(ctx: JobContext, http: httpx.AsyncClient, s: Settings, sid
         failed["sent"] = True
         bench.send("error", error=gemini_live.explain(err))
 
-    await session.start(room=ctx.room, agent=Agent(instructions=instructions, tools=tools))
+    # with the screen on, the app's screen track is Gemini's video input (sampled at 1 frame/s while the person talks)
+    room_options = room_io.RoomOptions(video_input=True) if screen else NOT_GIVEN
+    await session.start(room=ctx.room, agent=Agent(instructions=instructions, tools=tools), room_options=room_options)
     bench.send("session", session=sid, stt="gemini (in the model)", llm=opts["model"], tts="gemini",
                voice=opts["voice"], vad="gemini server", turn="gemini server", personas=turns.personas,
-               search=bool(cfg.get("gemini_search")))
+               search=bool(cfg.get("gemini_search")), screen=bool(screen))
 
 
 def main() -> None:

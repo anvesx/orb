@@ -20,7 +20,17 @@ public struct CompanionView: View {
                     .shadow(color: mood.tint.opacity(0.6), radius: 6)
             }
             .frame(width: 40, height: 40)
-            if model.settings.bubble, let words = bubble(mood) {
+            if let label = model.pointer?.label, !label.isEmpty {
+                Text(label)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Theme.canvas)
+                    .lineLimit(1)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(Theme.speak2))
+                    .shadow(color: Theme.speak2.opacity(0.5), radius: 8)
+                    .transition(.scale(scale: 0.8, anchor: .leading).combined(with: .opacity))
+            } else if model.settings.bubble, let words = bubble(mood) {
                 Text(words)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(mood == .speaking ? Theme.ink : Theme.ink2)
@@ -36,6 +46,7 @@ public struct CompanionView: View {
         }
         .fixedSize()
         .animation(.easeOut(duration: 0.2), value: mood)
+        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: model.pointer?.id)
         .accessibilityHidden(true)
     }
 

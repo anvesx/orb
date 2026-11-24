@@ -17,7 +17,9 @@ final class OptionTap {
 
     init(model: AppModel) {
         self.model = model
-        let prompt = ["AXTrustedCheckOptionPrompt": true] as CFDictionary  // kAXTrustedCheckOptionPrompt
+        // asked only when a feature needs it: the double tap, and the window, selection and document of the screen
+        let ask = model.settings.doubleTapOption || model.settings.screen
+        let prompt = ["AXTrustedCheckOptionPrompt": ask] as CFDictionary  // kAXTrustedCheckOptionPrompt
         let trusted = AXIsProcessTrustedWithOptions(prompt)
         trusted ? install() : wait()
     }

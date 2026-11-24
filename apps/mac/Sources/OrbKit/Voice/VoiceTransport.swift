@@ -33,5 +33,9 @@ public protocol VoiceTransport: AnyObject, Sendable {
     /// Joins the room with the microphone published and muted. The stream ends when the call ends.
     func connect(url: String, token: String) async throws -> AsyncStream<VoiceEvent>
     func setMicrophone(_ on: Bool) async throws
+    /// Answers the agent's RPC `method` with `handler` (payload in, answer out) for the rest of the call.
+    func serve(_ method: String, _ handler: @escaping @Sendable (String) async -> String) async
+    /// Publishes the call's screen track; nil when it could not.
+    func startScreen() async -> ScreenSink?
     func disconnect() async
 }

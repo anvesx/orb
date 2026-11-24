@@ -17,9 +17,14 @@ public final class AppModel {
 
     public private(set) var call = CallState()
     public private(set) var captions = Captions()
-    public private(set) var context: [ContextItem] = []
-    public private(set) var suggestions: [ContextItem] = []
-    public private(set) var sourceUses: [SourceUse] = []
+    /// What orb shows on the screen now: the companion goes there (mac-screen.md section 5).
+    public private(set) var pointer: PointTarget?
+    /// "Preview · pricing.pdf": what orb last read on the screen in this call.
+    public private(set) var seeing: String?
+    /// Whether orb may capture the screen (nil: not asked yet).
+    public private(set) var screenAllowed: Bool?
+    /// Whether the call's screen track is on.
+    public private(set) var sharing = false
     public private(set) var sessionID: String?
     public private(set) var serviceUp: Bool?
     public private(set) var gemini: GeminiOptions?
@@ -37,7 +42,7 @@ public final class AppModel {
     /// Why the double tap of ⌥ cannot work, or nil (the app sets it: it needs the Accessibility permission).
     public var doubleTapBlocked: String?
 
-    public let providers: [any ContextProvider]
+    public let screen: ScreenService?
     public var levels: AudioLevels { transport.levels }
     public var warning: String? { call.warning ?? notice }
 
@@ -48,11 +53,11 @@ public final class AppModel {
     @ObservationIgnored var tasks: [String: Task<Void, Never>] = [:]
     @ObservationIgnored var micChain: Task<Void, Never>?
 
-    public init(transport: VoiceTransport, providers: [any ContextProvider], settings: Settings = .load(),
+    public init(transport: VoiceTransport, screen: ScreenService? = nil, settings: Settings = .load(),
                 timing: Timing = Timing(), microphone: @escaping @Sendable () async -> Bool = AppModel.askMicrophone,
                 makeAPI: @escaping @Sendable (URL) -> AgentAPI = { AgentClient(base: $0) }) {
         self.transport = transport
-        self.providers = providers
+        self.screen = screen
         self.settings = settings
         self.timing = timing
         self.makeAPI = makeAPI
@@ -69,30 +74,14 @@ public final class AppModel {
     public func toggleHandsFree() { send(.toggleHandsFree) }
     public func newSession() { send(.newSession) }
 
-    public func add(_ item: ContextItem) {
-        guard !context.contains(item) else { return }
-        send(.newSession)
-        context.append(item)
-    }
-
-    public func remove(_ item: ContextItem) {
-        send(.newSession)
-        context.removeAll { $0 == item }
-    }
-
-    /// Is the service up, and which Gemini options does it have. Also refreshes the context suggestions.
+    /// Is the service up, which Gemini options does it have, and may orb see the screen.
     public func refresh() {
         tasks["refresh"]?.cancel()
         tasks["refresh"] = Task {
             let api = self.api
             serviceUp = (try? await api.health()) ?? false
             gemini = try? await api.gemini()
-        }
-        tasks["suggestions"]?.cancel()
-        tasks["suggestions"] = Task {  // the first Desktop listing can wait on macOS's permission prompt
-            var found: [ContextItem] = []
-            for p in providers { found += await p.suggestions() }
-            suggestions = found
+            if let screen { screenAllowed = await screen.allowed(ask: false) }
         }
     }
 
@@ -135,15 +124,21 @@ public final class AppModel {
             notice = nil
             captions = Captions()
             turnLog = TurnLog()
+            seeing = nil
             tasks["prepare"] = Task { await prepare() }
         case .cancelPrepare:
             cancel("prepare")
         case .connect(let token):
             tasks["call"] = Task { await connect(token) }
         case .disconnect:
-            ["call", "tail", "join", "idle"].forEach(cancel)
+            ["call", "tail", "join", "idle", "pointer"].forEach(cancel)
             youSpeaking = false
-            Task { await transport.disconnect() }
+            pointer = nil
+            sharing = false
+            Task { [screen] in
+                await screen?.feed(nil)
+                await transport.disconnect()
+            }
         case .setMic(let on):
             micChain = Task { [previous = micChain, transport] in
                 await previous?.value
@@ -159,7 +154,6 @@ public final class AppModel {
             after("idle", .seconds(settings.idleMinutes * 60)) { $0.send(.idleTimeout) }
         case .forgetSession:
             sessionID = nil
-            sourceUses = []
         }
     }
 
@@ -220,16 +214,8 @@ public final class AppModel {
                 sessionID = nil
             }
         }
-        var sources: [Source] = []
-        for p in providers {
-            let items = context.filter { $0.provider == p.id }
-            if !items.isEmpty { sources += await p.sources(for: items) }
-        }
-        let topic = context.isEmpty ? "Open discussion" : context.map(\.title).joined(separator: ", ")
-        let info = try await api.createSession(topic: String(topic.prefix(200)), config: settings.config,
-                                               sources: SourcePack.fit(sources))
+        let info = try await api.createSession(topic: "Open discussion", config: settings.config, sources: [])
         sessionID = info.id
-        sourceUses = info.sources
         return info.id
     }
 
@@ -242,17 +228,58 @@ public final class AppModel {
         }
         guard !Task.isCancelled else { return }
         send(.joined)
+        await shareScreen()
         for await event in stream { handle(event) }
         send(.disconnected(nil))
+    }
+
+    /// The screen tools are always answered (a call with the screen off says so); the track starts when the setting
+    /// is on and macOS allows it.
+    func shareScreen() async {
+        guard let screen else { return }
+        await transport.serve(ScreenRPC.read) { [weak self] _ in await self?.answerRead() ?? "{}" }
+        await transport.serve(ScreenRPC.show) { [weak self] payload in await self?.answerShow(payload) ?? "{}" }
+        guard settings.screen else { return }
+        screenAllowed = await screen.allowed(ask: true)
+        guard screenAllowed == true, call.phase == .live, let sink = await transport.startScreen() else { return }
+        guard call.phase == .live else { return }
+        sharing = true
+        await screen.feed(sink)
+        trace.debug("screen shared")
+    }
+
+    func answerRead() async -> String {
+        guard let screen, settings.screen else { return ScreenRPC.error("The person turned off screen sharing in orb.") }
+        let (answer, reading) = await ScreenRPC.answerRead(screen)
+        seeing = reading.seeing
+        trace.debug("screen read: \(answer.utf8.count) bytes")
+        return answer
+    }
+
+    func answerShow(_ payload: String) async -> String {
+        guard let screen, settings.screen else { return ScreenRPC.error("The person turned off screen sharing in orb.") }
+        let (answer, target) = await ScreenRPC.answerShow(payload, screen)
+        if let target, call.phase == .live {
+            pointer = target
+            after("pointer", .seconds(10)) { $0.pointer = nil }  // shortened when orb finishes speaking
+        }
+        return answer
     }
 
     func handle(_ event: VoiceEvent) {
         switch event {
         case .agentJoined: send(.agentJoined)
-        case .agentState(let a): send(.agentState(a))
+        case .agentState(let a):
+            send(.agentState(a))
+            if pointer != nil {
+                if a == .speaking { cancel("pointer") } else { after("pointer", .seconds(6)) { $0.pointer = nil } }
+            }
         case .youSpeaking(let on):
             youSpeaking = on
-            if on { send(.youSpeaking) }
+            if on {
+                send(.youSpeaking)
+                if call.agent != .speaking { pointer = nil }  // the speakers' echo is not you
+            }
         case .yourWords(let segment, let text, let final):
             trace.debug("you said (\(final ? "final" : "interim", privacy: .public)): \(text, privacy: .private)")
             captions.yourWords(segment: segment, text: text, final: final)
