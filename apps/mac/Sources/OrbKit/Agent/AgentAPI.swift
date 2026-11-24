@@ -30,18 +30,20 @@ public struct SessionConfig: Codable, Equatable, Sendable {
     public var geminiVoice: String?
     public var geminiPersonas: Bool?
     public var geminiSearch: Bool?
+    public var geminiScreen: Bool?
 
     public init(geminiModel: String? = nil, geminiVoice: String? = nil, geminiPersonas: Bool? = nil,
-                geminiSearch: Bool? = nil) {
+                geminiSearch: Bool? = nil, geminiScreen: Bool? = nil) {
         self.geminiModel = geminiModel
         self.geminiVoice = geminiVoice
         self.geminiPersonas = geminiPersonas
         self.geminiSearch = geminiSearch
+        self.geminiScreen = geminiScreen
     }
 
     enum CodingKeys: String, CodingKey {
         case voiceMode = "voice_mode", geminiModel = "gemini_model", geminiVoice = "gemini_voice"
-        case geminiPersonas = "gemini_personas", geminiSearch = "gemini_search"
+        case geminiPersonas = "gemini_personas", geminiSearch = "gemini_search", geminiScreen = "gemini_screen"
     }
 }
 

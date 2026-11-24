@@ -36,14 +36,31 @@ final class FakeTransport: VoiceTransport, @unchecked Sendable {
         continuation = c
         return stream
     }
+    var served: [String: @Sendable (String) async -> String] = [:]
+    var screens = 0
+
     func setMicrophone(_ on: Bool) async throws { mic.append(on) }
+    func serve(_ method: String, _ handler: @escaping @Sendable (String) async -> String) async { served[method] = handler }
+    func startScreen() async -> ScreenSink? {
+        screens += 1
+        return { _ in }
+    }
     func disconnect() async { continuation?.finish() }
 }
 
-struct Notes: ContextProvider {
-    let id = "notes", title = "Notes"
-    func suggestions() async -> [ContextItem] { [] }
-    func sources(for items: [ContextItem]) async -> [Source] { items.map { Source(name: $0.title, kind: .text, text: "text of \($0.title)") } }
+final class FakeScreen: ScreenService, @unchecked Sendable {
+    var allow = true
+    var fed: [Bool] = []
+    var reading = ScreenReading(app: "Preview", window: "pricing.pdf", screenText: "Launch on the third of March")
+    var lines = ["Pricing", "Launch on the third", "of March."]
+
+    func allowed(ask: Bool) async -> Bool { allow }
+    func feed(_ sink: ScreenSink?) async { fed.append(sink != nil) }
+    func read() async -> ScreenReading { reading }
+    func locate(_ text: String) async -> [CGRect]? {
+        TextMatch.find(text, in: lines).map { $0.map { CGRect(x: $0.range.lowerBound, y: 100 - $0.line * 10, width: $0.range.count, height: 10) } }
+    }
+    func spot(x: Int, y: Int) async -> CGPoint? { ScreenMap.point(x: x, y: y, display: CGRect(x: 0, y: 0, width: 1000, height: 1000)) }
 }
 
 @MainActor
@@ -52,38 +69,37 @@ func waitFor(_ ok: () -> Bool) async {
 }
 
 @MainActor @Suite struct AppModelTests {
-    let api = FakeAPI(), transport = FakeTransport()
+    let api = FakeAPI(), transport = FakeTransport(), screen = FakeScreen()
 
-    func model() -> AppModel {
+    func model(screenOn: Bool = true) -> AppModel {
         var settings = Settings()
         settings.idleMinutes = 10
-        return AppModel(transport: transport, providers: [Notes()], settings: settings, microphone: { true },
+        settings.screen = screenOn
+        return AppModel(transport: transport, screen: screen, settings: settings, microphone: { true },
                         makeAPI: { [api] _ in api })
     }
 
-    @Test func aPressMakesASessionWithTheContextJoinsAndOpensTheMic() async {
+    @Test func aPressMakesASessionJoinsAndOpensTheMic() async {
         let m = model()
-        m.add(ContextItem(id: "notes:a", provider: "notes", title: "a.md"))
         m.talkDown()
         await waitFor { m.call.phase == .live }
-        #expect(api.created.map(\.topic) == ["a.md"] && api.created[0].sources.map(\.text) == ["text of a.md"])
-        #expect(m.sessionID == "s1" && m.sourceUses.map(\.name) == ["a.md"])
+        #expect(api.created.map(\.topic) == ["Open discussion"] && api.created[0].sources.isEmpty)
+        #expect(m.sessionID == "s1")
         await waitFor { transport.mic == [true] }
         transport.continuation?.yield(.orbWords(segment: "r1", chunk: "Hello."))
         await waitFor { m.captions.orb == "Hello." }
         #expect(m.captions.orb == "Hello.")
     }
 
-    @Test func aForgottenSessionIsMadeAgainWithItsSources() async {
+    @Test func aForgottenSessionIsMadeAgain() async {
         let m = model()
-        m.add(ContextItem(id: "notes:a", provider: "notes", title: "a.md"))
         m.talkDown(); m.talkUp()
         await waitFor { m.call.phase == .live }
         m.hangUp()
         api.missing = ["s1"]  // the service restarted
         m.talkDown()
         await waitFor { m.sessionID == "s2" }
-        #expect(api.created.count == 2 && api.created[1].sources.count == 1)
+        #expect(api.created.count == 2)
     }
 
     @Test func aBlockedVoiceSaysWhy() async {
@@ -94,11 +110,52 @@ func waitFor(_ ok: () -> Bool) async {
         #expect(m.call.phase == .idle && m.warning?.contains("voice worker is not running") == true)
     }
 
-    @Test func changingTheContextEndsTheSession() async {
+    @Test func aCallSharesTheScreenAndAnswersTheScreenTools() async throws {
         let m = model()
-        m.talkDown(); m.talkUp()
-        await waitFor { m.call.phase == .live }
-        m.add(ContextItem(id: "notes:b", provider: "notes", title: "b.md"))
-        #expect(m.call.phase == .idle && m.sessionID == nil && m.context.count == 1)
+        m.talkDown()
+        await waitFor { m.sharing }
+        #expect(transport.screens == 1 && screen.fed == [true] && m.screenAllowed == true)
+        let read = await transport.served[ScreenRPC.read]!("{}")
+        #expect(read.contains("\"app\":\"Preview\"") && m.seeing == "Preview · pricing.pdf")
+        let shown = await transport.served[ScreenRPC.show]!(#"{"text":"third of march","label":"date"}"#)
+        #expect(shown == #"{"found":true}"#)
+        #expect(m.pointer?.rects.count == 2 && m.pointer?.label == "date")
+        let missed = await transport.served[ScreenRPC.show]!(#"{"text":"refund policy"}"#)
+        #expect(missed.contains("\"found\":false"))
+        m.hangUp()
+        await waitFor { screen.fed == [true, false] }
+        #expect(m.pointer == nil && !m.sharing)
+    }
+
+    @Test func withTheScreenOffNothingIsSharedAndTheToolsSaySo() async {
+        let m = model(screenOn: false)
+        m.talkDown()
+        await waitFor { transport.served.count == 2 }
+        #expect(transport.screens == 0 && screen.fed.isEmpty)
+        #expect(await transport.served[ScreenRPC.read]!("{}").contains("turned off screen sharing"))
+    }
+
+    @Test func withoutThePermissionTheCallGoesOnWithVoiceOnly() async {
+        screen.allow = false
+        let m = model()
+        m.talkDown()
+        await waitFor { m.screenAllowed == false }
+        #expect(m.call.phase == .live && transport.screens == 0 && !m.sharing)
+    }
+
+    @Test func thePointerGoesWhenYouTalkButNotOnOrbsOwnEcho() async {
+        let m = model()
+        m.talkDown()
+        await waitFor { transport.served.count == 2 }
+        _ = await transport.served[ScreenRPC.show]!(#"{"x":500,"y":250}"#)
+        #expect(m.pointer?.point == CGPoint(x: 500, y: 750))
+        transport.continuation?.yield(.agentState(.speaking))
+        transport.continuation?.yield(.youSpeaking(true))
+        await waitFor { m.call.agent == .speaking && m.youSpeaking }
+        #expect(m.pointer != nil)
+        transport.continuation?.yield(.agentState(.listening))
+        transport.continuation?.yield(.youSpeaking(true))
+        await waitFor { m.pointer == nil }
+        #expect(m.pointer == nil)
     }
 }

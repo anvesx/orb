@@ -6,7 +6,9 @@ public struct Settings: Codable, Equatable, Sendable {
     public var geminiModel: String?
     public var geminiVoice: String?
     public var personas = false
-    public var search = false
+    /// Google Search. A new key: the old "search" was off by default and saved as off.
+    public var webSearch = true
+    public var screen = true
     public var companion = true
     public var bubble = true
     public var idleMinutes = 3.0
@@ -21,7 +23,8 @@ public struct Settings: Codable, Equatable, Sendable {
         geminiModel = try c.decodeIfPresent(String.self, forKey: .geminiModel)
         geminiVoice = try c.decodeIfPresent(String.self, forKey: .geminiVoice)
         personas = try c.decodeIfPresent(Bool.self, forKey: .personas) ?? d.personas
-        search = try c.decodeIfPresent(Bool.self, forKey: .search) ?? d.search
+        webSearch = try c.decodeIfPresent(Bool.self, forKey: .webSearch) ?? d.webSearch
+        screen = try c.decodeIfPresent(Bool.self, forKey: .screen) ?? d.screen
         companion = try c.decodeIfPresent(Bool.self, forKey: .companion) ?? d.companion
         bubble = try c.decodeIfPresent(Bool.self, forKey: .bubble) ?? d.bubble
         idleMinutes = try c.decodeIfPresent(Double.self, forKey: .idleMinutes) ?? d.idleMinutes
@@ -39,6 +42,7 @@ public struct Settings: Codable, Equatable, Sendable {
     }
 
     public var config: SessionConfig {
-        SessionConfig(geminiModel: geminiModel, geminiVoice: geminiVoice, geminiPersonas: personas, geminiSearch: search)
+        SessionConfig(geminiModel: geminiModel, geminiVoice: geminiVoice, geminiPersonas: personas, geminiSearch: webSearch,
+                      geminiScreen: screen)
     }
 }

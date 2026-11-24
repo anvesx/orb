@@ -1,7 +1,7 @@
 import OrbKit
 import SwiftUI
 
-/// The panel: the orb and its state, the captions, the context of the call, a warning when there is one, and talk.
+/// The panel: the orb and its state, the captions, what orb can use, a warning when there is one, and talk.
 struct PanelView: View {
     let model: AppModel
     let actions: PanelActions
@@ -12,15 +12,17 @@ struct PanelView: View {
             header
             VStack(spacing: 10) {
                 OrbView(mood: mood) { [levels = model.levels] in mood == .speaking ? levels.orb : levels.you }
-                    .frame(width: 132, height: 132)
+                    .frame(width: 120, height: 120)
                 Text(stateLine(mood))
                     .font(Theme.state)
                     .foregroundStyle(mood == .idle ? Theme.ink2 : mood.tint)
+                    .contentTransition(.opacity)
                     .accessibilityAddTraits(.updatesFrequently)
             }
             .frame(maxWidth: .infinity)
-            CaptionsView(captions: model.captions, hint: "Hold \(model.talkShortcut) and talk" + (model.doubleTapBlocked == nil ? ", or double-tap ⌥ and just talk." : "."))
-            ContextView(model: model, pickFiles: actions.pickFiles)
+            CaptionsView(captions: model.captions, hint: "Look at anything, hold \(model.talkShortcut) and ask about it."
+                         + (model.doubleTapBlocked == nil ? " Or double-tap ⌥ and just talk." : ""))
+            SensesRow(model: model, allowScreen: actions.allowScreen)
             if let warning = model.warning {
                 WarningView(text: warning)
             } else if let blocked = model.doubleTapBlocked, model.settings.doubleTapOption {
@@ -40,14 +42,9 @@ struct PanelView: View {
             Logo().frame(width: 18, height: 18)
             Text("orb").font(Theme.wordmark).foregroundStyle(Theme.ink)
             Spacer()
-            ServiceDot(up: model.serviceUp)
-            Button(action: actions.openInspector) {
-                Image(systemName: "rectangle.split.2x1").font(.system(size: 13)).foregroundStyle(Theme.ink2)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Inspector")
             Button(action: actions.openSettings) {
                 Image(systemName: "gearshape").font(.system(size: 13)).foregroundStyle(Theme.ink2)
+                    .frame(width: 24, height: 24).contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
@@ -56,9 +53,9 @@ struct PanelView: View {
 
     func stateLine(_ mood: Mood) -> String {
         if model.call.reconnecting { return "Reconnecting…" }
-        if mood == .idle { return model.sessionID == nil ? "Ready" : "Ready · the call ended" }
+        if mood == .idle { return "Ready" }
         if mood == .ready { return "Ready · hold \(model.talkShortcut)" + (model.doubleTapBlocked == nil ? " or double-tap ⌥" : "") }
-        if model.call.handsFree && mood == .listening { return model.youSpeaking ? "Hearing you… · hands-free" : "Hands-free · double-tap ⌥ to stop" }
+        if model.call.handsFree && mood == .listening { return model.youSpeaking ? "Hearing you…" : "Hands-free · double-tap ⌥ to stop" }
         if mood == .listening { return model.youSpeaking ? "Hearing you…" : "Speak now" }
         return mood.words
     }
@@ -70,11 +67,63 @@ struct PanelView: View {
             if model.call.phase != .idle {
                 Button("Hang up") { model.hangUp() }
                     .buttonStyle(PillStyle(tint: Theme.alert))
-            } else if model.sessionID != nil {
-                Button("New session") { model.newSession() }
-                    .buttonStyle(PillStyle(tint: Theme.ink2))
             }
         }
+    }
+}
+
+/// One quiet line: what orb can use besides your voice. The screen (and what it read there) and Google Search.
+struct SensesRow: View {
+    let model: AppModel
+    let allowScreen: () -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            screen
+            if model.settings.webSearch {
+                Sense(icon: "globe", text: "Search", live: false)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder var screen: some View {
+        if !model.settings.screen {
+            Sense(icon: "eye.slash", text: "Screen off", live: false)
+        } else if model.screenAllowed == false {
+            Button(action: allowScreen) {
+                Sense(icon: "eye.trianglebadge.exclamationmark", text: "Allow screen access", live: false, tint: Theme.speak2)
+            }
+            .buttonStyle(.plain)
+            .help("orb can't see your screen. Allow orb in System Settings › Privacy & Security › Screen Recording.")
+        } else {
+            Sense(icon: "eye", text: model.sharing ? (model.seeing.map { "Sees \($0)" } ?? "Sees your screen")
+                                                   : "Sees your screen when you talk", live: model.sharing)
+        }
+    }
+}
+
+struct Sense: View {
+    var icon: String
+    var text: String
+    var live: Bool
+    var tint: Color = Theme.ink2
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon).font(.system(size: 10, weight: .semibold))
+            Text(text).font(.system(size: 11.5, weight: .medium)).lineLimit(1).truncationMode(.middle)
+            if live {
+                Circle().fill(Theme.listen).frame(width: 5, height: 5)
+                    .shadow(color: Theme.listen, radius: 3)
+            }
+        }
+        .foregroundStyle(live ? Theme.ink : tint)
+        .padding(.horizontal, 9)
+        .frame(height: 24)
+        .background(Capsule().fill(Theme.surface))
+        .overlay(Capsule().strokeBorder(live ? Theme.listen.opacity(0.4) : Theme.line, lineWidth: 0.5))
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -114,18 +163,6 @@ struct PillStyle: ButtonStyle {
             .padding(.horizontal, 12)
             .frame(height: 28)
             .background(Capsule().fill(tint.opacity(configuration.isPressed ? 0.22 : 0.12)))
-    }
-}
-
-struct ServiceDot: View {
-    var up: Bool?
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Circle().fill(up == true ? Theme.listen : up == false ? Theme.alert : Theme.idle).frame(width: 6, height: 6)
-            Text(up == true ? "service" : up == false ? "service off" : "checking").font(Theme.meta).foregroundStyle(Theme.ink2)
-        }
-        .accessibilityElement(children: .combine)
     }
 }
 

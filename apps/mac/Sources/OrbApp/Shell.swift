@@ -16,18 +16,17 @@ final class Shell {
     let model: AppModel
     let island: IslandWindow
     let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-    let files = FilesProvider()
+    let screen = MacScreen()
     var companion: CompanionOverlay?
     var optionTap: OptionTap?
     var windows: [String: NSWindow] = [:]
 
     init() {
-        model = AppModel(transport: LiveKitTransport(), providers: [files])
+        model = AppModel(transport: LiveKitTransport(), screen: screen)
         island = IslandWindow()
         island.show(IslandRoot(model: model, island: island, actions: PanelActions(
-            pickFiles: { [weak self] in self?.pickFiles() },
             openSettings: { [weak self] in self?.showSettings() },
-            openInspector: { [weak self] in self?.showInspector() })))
+            allowScreen: { Self.openPrivacy("Privacy_ScreenCapture") })))
         model.talkShortcut = Self.label(KeyboardShortcuts.getShortcut(for: .talk))
         companion = CompanionOverlay(model: model)
         optionTap = OptionTap(model: model)
@@ -95,16 +94,8 @@ final class Shell {
         windows[id] = window
     }
 
-    func pickFiles() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = true
-        panel.prompt = "Add"
-        panel.message = "Choose files or folders that orb can talk about."
-        NSApp.activate()
-        guard panel.runModal() == .OK else { return }
-        panel.urls.forEach { model.add(files.item(for: $0)) }
+    static func openPrivacy(_ pane: String) {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")!)
     }
 }
 

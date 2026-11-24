@@ -55,15 +55,13 @@ public struct IslandView: View {
     }
 }
 
-/// What the panel asks of the app: windows and pickers live there.
+/// What the panel asks of the app: windows and System Settings live there.
 public struct PanelActions {
-    public var pickFiles: () -> Void
     public var openSettings: () -> Void
-    public var openInspector: () -> Void
+    public var allowScreen: () -> Void
 
-    public init(pickFiles: @escaping () -> Void, openSettings: @escaping () -> Void, openInspector: @escaping () -> Void) {
-        self.pickFiles = pickFiles
+    public init(openSettings: @escaping () -> Void, allowScreen: @escaping () -> Void) {
         self.openSettings = openSettings
-        self.openInspector = openInspector
+        self.allowScreen = allowScreen
     }
 }
