@@ -216,3 +216,30 @@ version of Swift" (search). Check the log for tool calls and their time, and wat
 | `point_at` the blue robot | by Gemini's x and y: 120 to 500 px off; by `near_text` "Reasoner Agent": on its caption |
 | Google Search "latest Swift" | one search, the source named |
 | Hindi and Hinglish speech (the owner) | read and highlight worked; replies were sometimes in Devanagari |
+
+## 14. Hand-drawn marks (branch `feat/mac-rough-marks`)
+The flat amber box becomes a mark a person would draw with a pen: a rough box around a passage, a wobbly underline, a
+marker stroke, or a loose circle around a picture. Each is drawn in front of you, stroke by stroke.
+
+- **How (no library):** our own generator `OrbKit/Screen/Rough.swift`, after the published technique of Rough.js and
+  rough-notation (MIT): a line is a cubic curve between jittered ends, bowed sideways, drawn twice with different
+  randomness; a box is four such sides that overshoot the corners; a circle is one loop of about 1.1 turns through
+  jittered points (Catmull-Rom to cubic curves), so its end passes its start like a real pen; an underline is a
+  slightly wavy stroke under each line; a marker is a thick translucent wavy stroke over each line. A seeded random
+  generator makes each mark stable while it animates. RoughSwift was rejected: it runs Rough.js in JavaScriptCore.
+- **Drawing:** one `CAShapeLayer` per stroke, round caps, 2.5 pt, the coral of orb's speaking state (the marker: amber at
+  35 %, as tall as the line). `strokeEnd` goes 0 → 1 (0.3 s a stroke, ease out, strokes one after another), on the GPU;
+  paths take well under a millisecond to make.
+- **Which mark:** `highlight_text(text, note, style)` with `style` one of `underline` (a phrase, the default), `box`
+  (a number, a name, a short block), `marker` (a sentence to read). `point_at(near_text, …)` circles: Vision's
+  objectness saliency (`VNGenerateObjectnessBasedSaliencyImageRequest`) on the last screenshot gives object boxes; the
+  nearest one to the found text, under 15 % of the screen and within 120 pt, is circled, else the text itself.
+- **Tests:** each shape's bounds sit around its rect within the jitter; the same seed gives the same path, another
+  seed another; a circle turns more than once; the object chosen near a caption; the RPC carries the style.
+
+| # | Ticket | Done when |
+|---|---|---|
+| RM-1 | `Rough` generator + tests | Swift tests green |
+| RM-2 | Styles through the tool, RPC, `PointTarget.mark`; saliency for circles | Python and Swift tests green |
+| RM-3 | Overlay draws and animates the strokes | seen live with the test voice |
+| RM-4 | Live test, docs, PR, merge into staging | PR merged |

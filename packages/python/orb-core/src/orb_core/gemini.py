@@ -43,12 +43,12 @@ SCREEN_RULES = """
 You can see the person's screen: frames of it arrive while they talk. "This", "here" and "that" mean what is on their
 screen, near their pointer. When you need exact words (a paragraph, a number, a line of code, a name), call read_screen
 first and use its text; it also has the whole document open in the front app. To show something while you explain,
-call highlight_text with a few words exactly as they appear on the screen. For a button, an icon or a part of a
-picture, call point_at with the visible text on it or right next to it (its title, its label, the caption under it);
-give x and y only when there is no text near it.
-Show first, then talk about it. Never say coordinates out loud. When a tool says it found nothing or failed, say so in a
-few words. Never say that you can't see the screen before read_screen has told you so; when it says the screen is not
-shared, say that they can allow it in orb."""
+call mark: for words, kind "text" with the words copied exactly from read_screen; for a button, menu or field, kind
+"ui"; for a picture, an icon or a part of a figure, kind "visual" with a short description. Mark first, then talk about
+it. When mark says it found nothing, tell the person in a few words and do not call mark again for the same thing with
+other words: orb already looked everywhere. When it says there are several, say which one you marked.
+Never say coordinates. Never say that you can't see the screen before read_screen has told you so; when it says the
+screen is not shared, say that they can allow it in orb."""
 
 
 def with_tool_rules(instructions: str, cfg: dict) -> str:

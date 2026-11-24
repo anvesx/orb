@@ -20,7 +20,7 @@ public struct CompanionView: View {
                     .shadow(color: mood.tint.opacity(0.6), radius: 6)
             }
             .frame(width: 40, height: 40)
-            if let label = model.pointer?.label, !label.isEmpty {
+            if let label = model.canvas.focus?.note, !label.isEmpty {
                 Text(label)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(Theme.canvas)
@@ -46,7 +46,7 @@ public struct CompanionView: View {
         }
         .fixedSize()
         .animation(.easeOut(duration: 0.2), value: mood)
-        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: model.pointer?.id)
+        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: model.canvas.focus?.id)
         .accessibilityHidden(true)
     }
 

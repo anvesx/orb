@@ -244,7 +244,7 @@ def test_a_call_with_the_screen_takes_its_video_and_has_the_screen_tools_and_rul
     session, bench = gemini_call(monkeypatch, cfg={"voice_mode": "gemini-live", "gemini_screen": True,
                                                    "gemini_search": True})
     agent = session.started[1]
-    assert {t.id for t in agent.tools} == {"gemini_google_search", "read_screen", "highlight_text", "point_at"}
+    assert {t.id for t in agent.tools} == {"gemini_google_search", "read_screen", "mark", "clear_marks"}
     assert agent.instructions == "orb rules" + gemini.SEARCH_RULES + gemini.SCREEN_RULES
     assert session.room_options.video_input is True and bench.sent[-1][1]["screen"] is True
 

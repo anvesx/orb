@@ -23,6 +23,8 @@ public struct IslandView: View {
                         .frame(width: 20, height: 20)
                     Text(mood == .idle ? "orb" : mood.words)
                         .font(mood == .idle ? Theme.wordmark : Theme.state)
+                        .lineLimit(1)
+                        .fixedSize()
                         .foregroundStyle(mood == .idle ? Theme.ink : mood.tint)
                         .contentTransition(.opacity)
                     if model.warning != nil && !expanded {

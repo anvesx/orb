@@ -41,6 +41,8 @@ public struct Settings: Codable, Equatable, Sendable {
         if let data = try? JSONEncoder().encode(self) { defaults.set(data, forKey: Self.key) }
     }
 
+    public var serviceBase: URL { URL(string: serviceURL) ?? URL(string: Settings().serviceURL)! }
+
     public var config: SessionConfig {
         SessionConfig(geminiModel: geminiModel, geminiVoice: geminiVoice, geminiPersonas: personas, geminiSearch: webSearch,
                       geminiScreen: screen)

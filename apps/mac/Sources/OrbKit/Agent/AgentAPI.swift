@@ -80,6 +80,19 @@ public struct GeminiOptions: Decodable, Equatable, Sendable {
     }
 }
 
+/// A box the vision model found (`POST /v1/ground`): `box` is [ymin, xmin, ymax, xmax], 0 to 1000 over the image.
+public struct GroundBox: Codable, Equatable, Sendable {
+    public var box: [Int]
+    public var label: String
+    public var confidence: Double?
+
+    public init(box: [Int], label: String = "", confidence: Double? = nil) {
+        self.box = box
+        self.label = label
+        self.confidence = confidence
+    }
+}
+
 public struct AgentError: Error, Equatable, LocalizedError {
     public var status: Int  // 0: no answer
     public var message: String
@@ -103,4 +116,6 @@ public protocol AgentAPI: Sendable {
     func token(session: String) async throws -> VoiceToken
     /// The session's state for the inspector, or nil when it has not changed since `version`.
     func state(session: String, since version: Int?) async throws -> [String: JSONValue]?
+    /// Where a described thing is on a JPEG of the screen. `strict` checks every answer on its crop.
+    func ground(image: Data, query: String, strict: Bool) async throws -> [GroundBox]
 }

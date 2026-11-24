@@ -95,19 +95,3 @@ extension String {
         return String(self[..<end])
     }
 }
-
-/// A place on the screen that orb shows (mac-screen.md section 5), in global AppKit points.
-public struct PointTarget: Equatable, Sendable, Identifiable {
-    public let id = UUID()
-    /// Where the companion goes.
-    public var point: CGPoint
-    /// The words to highlight; empty for a point.
-    public var rects: [CGRect]
-    public var label: String
-
-    public init(point: CGPoint, rects: [CGRect] = [], label: String = "") {
-        self.point = point
-        self.rects = rects
-        self.label = label
-    }
-}

@@ -9,6 +9,19 @@ public enum ScreenMap {
                width: box.width * display.width, height: box.height * display.height)
     }
 
+    /// A vision model's `box_2d`: [ymin, xmin, ymax, xmax], 0 to 1000 over the image, origin at the top left.
+    public static func rect(box2d b: [Int], display: CGRect) -> CGRect? {
+        guard b.count == 4 else { return nil }
+        let (y0, x0, y1, x1) = (CGFloat(b[0]) / 1000, CGFloat(b[1]) / 1000, CGFloat(b[2]) / 1000, CGFloat(b[3]) / 1000)
+        return CGRect(x: display.minX + x0 * display.width, y: display.maxY - y1 * display.height,
+                      width: (x1 - x0) * display.width, height: (y1 - y0) * display.height)
+    }
+
+    /// An Accessibility frame: top-left origin on the main display, y down.
+    public static func rect(accessibility r: CGRect, mainHeight: CGFloat) -> CGRect {
+        CGRect(x: r.minX, y: mainHeight - r.maxY, width: r.width, height: r.height)
+    }
+
     /// A Gemini point: 0 to 1000 over the image, origin at the top left.
     public static func point(x: Int, y: Int, display: CGRect) -> CGPoint {
         let fx = Double(min(max(x, 0), 1000)) / 1000, fy = Double(min(max(y, 0), 1000)) / 1000
@@ -29,12 +42,6 @@ public enum ScreenMap {
             last = r
         }
         return out
-    }
-
-    /// Where the companion stands for a highlight: at the left end of the first line, a little below it.
-    public static func anchor(of rects: [CGRect]) -> CGPoint? {
-        guard let first = rects.first else { return nil }
-        return CGPoint(x: first.minX, y: first.minY)
     }
 }
 

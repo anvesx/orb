@@ -17,8 +17,8 @@ public final class AppModel {
 
     public private(set) var call = CallState()
     public private(set) var captions = Captions()
-    /// What orb shows on the screen now: the companion goes there (mac-screen.md section 5).
-    public private(set) var pointer: PointTarget?
+    /// What orb has drawn on the screen (screen-canvas.md section 4); the companion goes to its focus.
+    public private(set) var canvas = CanvasState()
     /// "Preview · pricing.pdf": what orb last read on the screen in this call.
     public private(set) var seeing: String?
     /// Whether orb may capture the screen (nil: not asked yet).
@@ -64,7 +64,7 @@ public final class AppModel {
         self.microphone = microphone
     }
 
-    var api: AgentAPI { makeAPI(URL(string: settings.serviceURL) ?? URL(string: "http://127.0.0.1:8100")!) }
+    var api: AgentAPI { makeAPI(settings.serviceBase) }
 
     // MARK: - Intents
 
@@ -131,9 +131,9 @@ public final class AppModel {
         case .connect(let token):
             tasks["call"] = Task { await connect(token) }
         case .disconnect:
-            ["call", "tail", "join", "idle", "pointer"].forEach(cancel)
+            ["call", "tail", "join", "idle"].forEach(cancel)
             youSpeaking = false
-            pointer = nil
+            draw(.clear)
             sharing = false
             Task { [screen] in
                 await screen?.feed(nil)
@@ -238,7 +238,7 @@ public final class AppModel {
     func shareScreen() async {
         guard let screen else { return }
         await transport.serve(ScreenRPC.read) { [weak self] _ in await self?.answerRead() ?? "{}" }
-        await transport.serve(ScreenRPC.show) { [weak self] payload in await self?.answerShow(payload) ?? "{}" }
+        await transport.serve(CanvasOp.method) { [weak self] payload in await self?.answerCanvas(payload) ?? "{}" }
         guard settings.screen else { return }
         screenAllowed = await screen.allowed(ask: true)
         guard screenAllowed == true, call.phase == .live, let sink = await transport.startScreen() else { return }
@@ -249,21 +249,43 @@ public final class AppModel {
     }
 
     func answerRead() async -> String {
-        guard let screen, settings.screen else { return ScreenRPC.error("The person turned off screen sharing in orb.") }
+        guard let screen, settings.screen else { return CanvasAnswer.failed(Self.screenOff).json }
         let (answer, reading) = await ScreenRPC.answerRead(screen)
         seeing = reading.seeing
         trace.debug("screen read: \(answer.utf8.count) bytes")
         return answer
     }
 
-    func answerShow(_ payload: String) async -> String {
-        guard let screen, settings.screen else { return ScreenRPC.error("The person turned off screen sharing in orb.") }
-        let (answer, target) = await ScreenRPC.answerShow(payload, screen)
-        if let target, call.phase == .live {
-            pointer = target
-            after("pointer", .seconds(10)) { $0.pointer = nil }  // shortened when orb finishes speaking
+    static let screenOff = "The person turned off screen sharing in orb."
+
+    func answerCanvas(_ payload: String) async -> String {
+        guard let screen, settings.screen else { return CanvasAnswer.failed(Self.screenOff).json }
+        guard let op = CanvasOp.decode(payload) else { return CanvasAnswer.failed("orb did not understand the op.").json }
+        switch op.op {
+        case .clear:
+            let n = canvas.annotations.count
+            draw(.clear)
+            return CanvasAnswer.cleared(n).json
+        case .mark:
+            guard let what = op.target, !what.isEmpty, let kind = op.kind else {
+                return CanvasAnswer.failed("A mark needs a target and its kind.").json
+            }
+            switch await screen.ground(Target(what, kind: kind)) {
+            case .notFound(let why):
+                return CanvasAnswer.notFound(why).json
+            case .found(let anchor, let by, let matches, let confidence):
+                guard call.phase == .live else { return CanvasAnswer.notFound("The call ended.").json }
+                let mark = Annotation(id: op.opId, kind: .mark(op.style ?? .underline), anchor: anchor, note: op.note ?? "")
+                draw(.add(mark, opID: op.opId, at: .now))
+                return CanvasAnswer.found(id: op.opId, by: by, matches: matches, confidence: confidence).json
+            }
         }
-        return answer
+    }
+
+    func draw(_ event: CanvasEvent) {
+        canvas = Canvas.reduce(canvas, event)
+        guard let expires = canvas.expires, expires != .distantFuture else { return cancel("canvas") }
+        after("canvas", .seconds(max(0, expires.timeIntervalSinceNow))) { $0.draw(.tick(.now)) }
     }
 
     func handle(_ event: VoiceEvent) {
@@ -271,14 +293,12 @@ public final class AppModel {
         case .agentJoined: send(.agentJoined)
         case .agentState(let a):
             send(.agentState(a))
-            if pointer != nil {
-                if a == .speaking { cancel("pointer") } else { after("pointer", .seconds(6)) { $0.pointer = nil } }
-            }
+            draw(a == .speaking ? .orbSpeaking : .orbStopped(at: .now))
         case .youSpeaking(let on):
             youSpeaking = on
             if on {
                 send(.youSpeaking)
-                if call.agent != .speaking { pointer = nil }  // the speakers' echo is not you
+                if call.agent != .speaking { draw(.youSpoke) }  // the speakers' echo is not you
             }
         case .yourWords(let segment, let text, let final):
             trace.debug("you said (\(final ? "final" : "interim", privacy: .public)): \(text, privacy: .private)")
