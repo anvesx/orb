@@ -86,8 +86,9 @@ class FakeSession:
         for fn in self.handlers.get(name, []):
             fn(ev)
 
-    async def start(self, room, agent):
+    async def start(self, agent, room=None, room_options=None):
         self.started = (room, agent)
+        self.room_options = room_options
 
 
 class FakeBench:
@@ -99,7 +100,7 @@ class FakeBench:
 
 
 class Ctx:
-    room = object()
+    room = type("Room", (), {"remote_participants": {}})()
 
 
 def gemini_call(monkeypatch, instructions_status=200, cfg=None):
@@ -191,6 +192,7 @@ def test_gemini_replies_are_logged_with_text_only_when_text_logging_is_on(monkey
 def test_personas_make_gemini_wait_for_the_note_and_search_adds_google():
     assert gemini_live.options({"gemini_personas": True})["tool_behavior"].name == "BLOCKING"
     assert "tool_behavior" not in gemini_live.options({"gemini_search": True})
+    assert gemini_live.options({"gemini_screen": True})["tool_behavior"].name == "BLOCKING"  # it waits for the text
     assert gemini_live.provider_tools({}) == []
 
 
@@ -236,3 +238,17 @@ def test_the_plugin_still_has_the_private_methods_that_the_model_overrides(monke
     assert params(realtime_api.RealtimeModel, "session") == params(gemini_live.Model, "session")
     monkeypatch.setenv("GOOGLE_API_KEY", "fake-key-for-the-test")
     assert isinstance(gemini_live.make_model({})._sessions, realtime_api.weakref.WeakSet)
+
+
+def test_a_call_with_the_screen_takes_its_video_and_has_the_screen_tools_and_rules(monkeypatch):
+    session, bench = gemini_call(monkeypatch, cfg={"voice_mode": "gemini-live", "gemini_screen": True,
+                                                   "gemini_search": True})
+    agent = session.started[1]
+    assert {t.id for t in agent.tools} == {"gemini_google_search", "read_screen", "highlight_text", "point_at"}
+    assert agent.instructions == "orb rules" + gemini.SEARCH_RULES + gemini.SCREEN_RULES
+    assert session.room_options.video_input is True and bench.sent[-1][1]["screen"] is True
+
+
+def test_a_call_without_the_screen_takes_no_video(monkeypatch):
+    session, bench = gemini_call(monkeypatch)
+    assert not isinstance(session.room_options, main.room_io.RoomOptions) and bench.sent[-1][1]["screen"] is False

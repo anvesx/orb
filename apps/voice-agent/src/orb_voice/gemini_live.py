@@ -38,7 +38,7 @@ def options(cfg: dict) -> dict:
     extra = {}
     if model.endswith("-extended-thinking"):  # it refuses a session without a level (1007); the plain model refuses one
         extra["thinking_config"] = types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW)
-    if cfg.get("gemini_personas"):  # Gemini waits for the persona note before it speaks
+    if cfg.get("gemini_personas") or cfg.get("gemini_screen"):  # Gemini waits for the note or the screen's text
         extra["tool_behavior"] = types.Behavior.BLOCKING
     return {
         **extra,

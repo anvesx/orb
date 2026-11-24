@@ -58,6 +58,7 @@ class SessionConfig(BaseModel):
     gemini_voice: str | None = Field(default=None, max_length=32)
     gemini_personas: bool | None = None  # docs/design/gemini-personas.md
     gemini_search: bool | None = None
+    gemini_screen: bool | None = None  # docs/design/mac-screen.md: the app shares the screen
 
 
 class SourceIn(BaseModel):
